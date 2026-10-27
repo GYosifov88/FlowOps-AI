@@ -1,9 +1,11 @@
 """Shared fixtures. Every test gets its own fresh SQLite file under pytest's tmp_path,
 so tests are order-independent and nothing is written into the repo."""
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from app.database import create_db_engine, init_db
+from app.database import create_db_engine, get_db, init_db
+from app.main import app
 
 
 @pytest.fixture
@@ -36,3 +38,11 @@ def override_get_db(engine):
             db.close()
 
     return _override
+
+
+@pytest.fixture
+def client(override_get_db):
+    """TestClient for the real app, wired to the per-test database."""
+    app.dependency_overrides[get_db] = override_get_db
+    yield TestClient(app)
+    app.dependency_overrides.clear()

@@ -4,8 +4,8 @@ Personal web app for monitoring automation workflows (initially my n8n instance)
 later, analyzing failures with an LLM. Learning + portfolio project, not a production
 service. V1 runs on **localhost only**.
 
-Current state: **M2 — data model** (`Workflow` and `ExecutionEvent` tables on SQLite;
-no API around them yet).
+Current state: **M3 — workflow registry** (`/api/workflows` CRUD with soft delete, on top
+of the M2 `Workflow` / `ExecutionEvent` tables; no event API yet).
 
 ## Setup (Windows PowerShell)
 
@@ -32,6 +32,18 @@ python -m uvicorn app.main:app --reload
 ```powershell
 python -m pytest
 ```
+
+## Workflow API
+
+| Method & path | Does |
+|---|---|
+| `POST /api/workflows` | create (201) |
+| `GET /api/workflows` | list active; `?include_inactive=true` for all |
+| `GET /api/workflows/{id}` | one workflow (inactive too) |
+| `PATCH /api/workflows/{id}` | partial update; `{"is_active": true}` re-activates |
+| `DELETE /api/workflows/{id}` | soft delete (204); the row and its events are kept |
+
+Try it in the interactive docs at http://localhost:8000/docs.
 
 ## Configuration
 
@@ -65,6 +77,9 @@ app/
   config.py    environment-based settings
   database.py  engine, sessions, SQLite pragmas, UTC datetime column type
   models.py    Workflow, ExecutionEvent, ExecutionStatus
+  schemas.py   Pydantic input/output models
+  routers/     HTTP routes (thin)
+  services/    database logic
   timeutil.py  utcnow(), to_naive_utc(), compute_duration_ms()
 scripts/
   reset_db.py  delete and recreate the database

@@ -43,6 +43,17 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   `override_get_db` fixtures in `tests/conftest.py`); dispose the engine on teardown or
   Windows cannot delete the file.
 
+## Workflow API (M3)
+- Layers: `app/routers/` (thin `def` routes) -> `app/services/` (all DB work, commits) ->
+  `app/models.py`. `app/schemas.py` holds separate input/output Pydantic models; never return ORM objects.
+- `/api/workflows`: POST 201, GET list (active only; `?include_inactive=true`), GET/PATCH `/{id}`,
+  DELETE `/{id}` = soft delete, 204, idempotent. 404 unknown id, 422 bad input. No hard delete.
+- GET/PATCH by id also work on inactive workflows; re-activate with PATCH `{"is_active": true}`.
+- Input schemas use `extra="forbid"` and strip whitespace; PATCH applies only fields sent
+  (`exclude_unset`) and rejects null for name/source/is_active.
+- API datetimes are serialized as aware UTC (`...Z`); the DB stays naive UTC.
+- Tests: `client` fixture in `tests/conftest.py` = TestClient on the real app + per-test DB.
+
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,
   pydantic, python-dotenv, pytest, httpx2, sqlalchemy, jinja2. Ask before adding anything else.
