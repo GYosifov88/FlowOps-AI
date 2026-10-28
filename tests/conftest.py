@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from app.config import Settings, get_settings
 from app.database import create_db_engine, get_db, init_db
 from app.main import app
 
@@ -40,9 +41,20 @@ def override_get_db(engine):
     return _override
 
 
+TEST_TOKEN = "test-token-123"
+
+
 @pytest.fixture
 def client(override_get_db):
-    """TestClient for the real app, wired to the per-test database."""
+    """TestClient for the real app, wired to the per-test database and a known ingest token."""
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_name="test", log_level="INFO", database_url="unused", ingest_token=TEST_TOKEN
+    )
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def auth_headers():
+    return {"X-FlowOps-Token": TEST_TOKEN}

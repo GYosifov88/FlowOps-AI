@@ -12,6 +12,7 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - Install:  `pip install -r requirements.txt`
 - Run app:  `python -m uvicorn app.main:app --reload`  (http://localhost:8000, docs at /docs)
 - Run tests: `python -m pytest`
+- Seed synthetic data (app must be running): `python -m scripts.seed`  (safe to repeat)
 - Reset the DB (DESTRUCTIVE, deletes all data): `python -m scripts.reset_db --yes`
   (run from the repo root; SQLite only; stop the app first)
 
@@ -23,7 +24,7 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 3. **DB portability:** no SQLite-specific SQL, no `sqlite3` import, all date/time logic
    in Python — keeps the PostgreSQL path open.
 4. **Throwaway DB through V1:** no migrations (Alembic is Phase 2). Schema changes =
-   delete and re-seed (`python -m scripts.reset_db --yes`, then `scripts/seed.py`).
+   delete and re-seed (`python -m scripts.reset_db --yes`, then `python -m scripts.seed`).
 
 ## Data model (M2)
 - `app/models.py`: `Workflow` 1—* `ExecutionEvent`. Statuses: `ExecutionStatus` =
@@ -53,6 +54,22 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   (`exclude_unset`) and rejects null for name/source/is_active.
 - API datetimes are serialized as aware UTC (`...Z`); the DB stays naive UTC.
 - Tests: `client` fixture in `tests/conftest.py` = TestClient on the real app + per-test DB.
+
+## Event ingestion (M4)
+- `POST /api/events` (`app/routers/events.py` -> `app/services/events.py`). Requires header
+  `X-FlowOps-Token` == `FLOWOPS_INGEST_TOKEN` (`app/auth.py`, `secrets.compare_digest` on bytes).
+  The app refuses to start without the token (lifespan check in `app/main.py`); an empty configured
+  token also rejects every request. Auth is checked before body validation (401 beats 422).
+- Upsert on `external_event_id`: created 201; NON_TERMINAL -> TERMINAL updates the row in place
+  (keeps id/created_at/started_at) 200 `updated`; anything else on an existing row is 200
+  `unchanged` (TERMINAL is never overwritten; running -> waiting is also "unchanged"). No external
+  id = always insert. Same id under another workflow = 409. Unknown workflow = 404; inactive accepted.
+- `app/sanitize.py::sanitize_error` builds `error_summary` (redact -> collapse whitespace -> cap 500).
+  Best-effort only; `error_raw` is stored unmodified and has no field in any response schema.
+- Event `status` must already be a canonical FlowOps value; n8n's words (`error`, `crashed`...) are
+  mapped in M7. Malformed timestamps are 422.
+- Tests: `client` fixture sets the token to a known value; use the `auth_headers` fixture.
+- `scripts/seed.py` runs against a live server (FLOWOPS_BASE_URL, default http://localhost:8000).
 
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,

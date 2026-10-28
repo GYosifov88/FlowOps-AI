@@ -4,8 +4,8 @@ Personal web app for monitoring automation workflows (initially my n8n instance)
 later, analyzing failures with an LLM. Learning + portfolio project, not a production
 service. V1 runs on **localhost only**.
 
-Current state: **M3 — workflow registry** (`/api/workflows` CRUD with soft delete, on top
-of the M2 `Workflow` / `ExecutionEvent` tables; no event API yet).
+Current state: **M4 — event ingestion** (`/api/workflows` CRUD plus token-protected
+`POST /api/events` with upsert and error sanitizing; no event query API yet).
 
 ## Setup (Windows PowerShell)
 
@@ -14,6 +14,8 @@ python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
+# then set FLOWOPS_INGEST_TOKEN in .env, e.g. the output of:
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
 Requires Python 3.12.
@@ -45,6 +47,20 @@ python -m pytest
 
 Try it in the interactive docs at http://localhost:8000/docs.
 
+## Event ingestion
+
+`POST /api/events` records one execution event. It needs the header `X-FlowOps-Token` (401
+otherwise). Events are upserted on `external_event_id`: a `running` event later sent as
+`success`/`failed`/`canceled` updates the same row; finished events are never overwritten.
+The response is `{"result": "created" | "updated" | "unchanged", "event": {...}}`. The raw error
+text is stored but never returned; only a redacted, length-capped `error_summary` is.
+
+With the app running, load synthetic data (safe to repeat):
+
+```powershell
+python -m scripts.seed
+```
+
 ## Configuration
 
 Settings come from environment variables, loaded from a local `.env` file via
@@ -55,6 +71,8 @@ python-dotenv. `.env` is git-ignored; `.env.example` is the committed template.
 | `APP_NAME`     | `FlowOps AI`                 | App title in /docs |
 | `LOG_LEVEL`    | `INFO`                       | Log verbosity      |
 | `DATABASE_URL` | `flowops.db` in the repo root | SQLite database    |
+| `FLOWOPS_INGEST_TOKEN` | *(required)*        | Shared secret for `POST /api/events`; the app will not start without it |
+| `FLOWOPS_BASE_URL` | `http://localhost:8000`     | Only used by `scripts.seed` |
 
 ## Database
 
@@ -80,9 +98,12 @@ app/
   schemas.py   Pydantic input/output models
   routers/     HTTP routes (thin)
   services/    database logic
+  auth.py      ingest token check
+  sanitize.py  error text redaction
   timeutil.py  utcnow(), to_naive_utc(), compute_duration_ms()
 scripts/
   reset_db.py  delete and recreate the database
+  seed.py      post synthetic data to a running app
 tests/
   conftest.py  fresh-database fixtures
   test_*.py
