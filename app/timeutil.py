@@ -4,6 +4,7 @@ Convention: every timestamp FlowOps stores or compares is NAIVE UTC. Produce "no
 utcnow(); never call datetime.utcnow() (deprecated, and naive by accident). Convert to
 local time for display only.
 """
+import re
 from datetime import datetime, timedelta, timezone
 
 
@@ -35,3 +36,20 @@ def compute_duration_ms(
     if delta < timedelta(0):
         return None
     return delta // timedelta(milliseconds=1)
+
+
+_BARE_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def parse_query_bound(value: str, *, exclusive_upper: bool = False) -> datetime:
+    """Parse a date/time filter bound into naive UTC. Raises ValueError if unparseable.
+
+    Naive input is taken as UTC; aware input is converted. A bare date (YYYY-MM-DD) means
+    00:00 UTC of that day -- except for an exclusive upper bound, where it means 00:00 of
+    the NEXT day, so that `to=2026-10-27` covers all of 27 October.
+    """
+    text = value.strip()
+    if _BARE_DATE.fullmatch(text):
+        day = datetime.fromisoformat(text)
+        return day + timedelta(days=1) if exclusive_upper else day
+    return to_naive_utc(datetime.fromisoformat(text))

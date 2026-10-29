@@ -4,8 +4,8 @@ Personal web app for monitoring automation workflows (initially my n8n instance)
 later, analyzing failures with an LLM. Learning + portfolio project, not a production
 service. V1 runs on **localhost only**.
 
-Current state: **M4 — event ingestion** (`/api/workflows` CRUD plus token-protected
-`POST /api/events` with upsert and error sanitizing; no event query API yet).
+Current state: **M5 — event queries** (workflow CRUD, token-protected `POST /api/events` with
+upsert and error sanitizing, and `GET /api/events` with filters and paging).
 
 ## Setup (Windows PowerShell)
 
@@ -61,6 +61,21 @@ With the app running, load synthetic data (safe to repeat):
 python -m scripts.seed
 ```
 
+## Querying events
+
+`GET /api/events` (no token needed in V1) returns `{"items": [...], "total": N, "limit": 50, "offset": 0}`,
+newest first.
+
+| Parameter | Meaning |
+|---|---|
+| `workflow_id`, `status` | exact match (`success`, `failed`, `running`, `waiting`, `canceled`, `unknown`) |
+| `started_from` | `started_at >=` this, inclusive |
+| `started_to` | `started_at <` this, exclusive; a bare date like `2026-10-27` covers all of that day |
+| `limit`, `offset` | paging; `limit` 1-200 (default 50), above 200 is a 422 |
+
+Dates are UTC (a bare date is 00:00 UTC; URL-encode a `+` offset as `%2B`). Events with no
+`started_at` are left out whenever `started_from` or `started_to` is used.
+
 ## Configuration
 
 Settings come from environment variables, loaded from a local `.env` file via
@@ -75,6 +90,9 @@ python-dotenv. `.env` is git-ignored; `.env.example` is the committed template.
 | `FLOWOPS_BASE_URL` | `http://localhost:8000`     | Only used by `scripts.seed` |
 
 ## Database
+
+The app creates any missing tables when it starts, so a fresh checkout works without setup
+(it never drops or alters existing tables, and never adds data).
 
 The database is **throwaway during V1**: there are no migrations. After changing the
 schema, delete and recreate it (this erases all data):

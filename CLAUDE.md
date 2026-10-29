@@ -39,8 +39,11 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   `error_summary` may be shown.
 - SQLite pragmas (WAL, busy_timeout=5000, foreign_keys=ON) are set by a connect listener
   in `app/database.py`, registered per engine, SQLite only. WAL creates `*.db-wal` / `*.db-shm`.
+- Startup (`lifespan` in `app/main.py`) runs `init_db()` after the token check: creates MISSING tables only.
+  It never drops, alters or seeds, so a changed schema still needs `scripts.reset_db`. A fresh checkout needs no manual step.
 - `DATABASE_URL` (default: `flowops.db` in the repo root). Importing `app.database` builds the engine.
-- Tests: every test gets a fresh SQLite file in `tmp_path` (`engine`, `db_session`,
+- Tests: an autouse fixture in `tests/conftest.py` points `app.database.engine` at a tmp file so starting
+  the app can never create `flowops.db`. Every test gets a fresh SQLite file in `tmp_path` (`engine`, `db_session`,
   `override_get_db` fixtures in `tests/conftest.py`); dispose the engine on teardown or
   Windows cannot delete the file.
 
@@ -70,6 +73,16 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   mapped in M7. Malformed timestamps are 422.
 - Tests: `client` fixture sets the token to a known value; use the `auth_headers` fixture.
 - `scripts/seed.py` runs against a live server (FLOWOPS_BASE_URL, default http://localhost:8000).
+
+## Event queries (M5)
+- `GET /api/events` (unauthenticated read, V1) -> `{items, total, limit, offset}`; `service.query_events`.
+  Filters (AND): `workflow_id`, `status` (canonical enum), `started_from` (inclusive), `started_to` (exclusive).
+- Bounds are UTC: naive = UTC, aware converted; a bare `YYYY-MM-DD` is 00:00 UTC, but for
+  `started_to` it means 00:00 of the NEXT day (`app.timeutil.parse_query_bound`). Bad date = 422.
+- Either bound excludes events whose `started_at` is NULL. Without bounds they list last
+  (explicit `nulls_last()`: SQLite and PostgreSQL order NULLs differently).
+- Order: `started_at` DESC, `id` DESC. `limit` 1..200 (default 50; above 200 is 422, never clamped), `offset` >= 0.
+- Unknown `workflow_id` or from > to = empty page, not an error. `error_raw` is never in a response.
 
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,

@@ -4,9 +4,23 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+import app.database as database
 from app.config import Settings, get_settings
 from app.database import create_db_engine, get_db, init_db
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def isolate_default_engine(tmp_path, monkeypatch):
+    """Point the app's default engine at a throwaway file for EVERY test.
+
+    App startup now runs init_db() on the default engine; without this, any test that
+    starts the app would create flowops.db in the repo root.
+    """
+    eng = create_db_engine(f"sqlite:///{(tmp_path / 'default-engine.db').as_posix()}")
+    monkeypatch.setattr(database, "engine", eng)
+    yield
+    eng.dispose()
 
 
 @pytest.fixture

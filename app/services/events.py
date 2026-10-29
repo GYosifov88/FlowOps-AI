@@ -11,13 +11,14 @@ An event without an external_event_id has nothing to dedup on and is always inse
 """
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import NON_TERMINAL, TERMINAL, ExecutionEvent, Workflow
+from app.models import NON_TERMINAL, TERMINAL, ExecutionEvent, ExecutionStatus, Workflow
 from app.sanitize import sanitize_error
 from app.schemas import EventCreate
 from app.timeutil import compute_duration_ms, to_naive_utc
@@ -123,3 +124,41 @@ def _apply_to_existing(
     db.commit()
     db.refresh(event)
     return IngestResult("updated", event)
+
+
+def query_events(
+    db: Session,
+    *,
+    workflow_id: int | None = None,
+    status: ExecutionStatus | None = None,
+    started_from: datetime | None = None,
+    started_to: datetime | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[ExecutionEvent], int]:
+    """Filtered, paged events plus the total number of matches.
+
+    started_from is inclusive, started_to exclusive (both naive UTC). If either bound is
+    given, events with a NULL started_at never match. Newest first; id breaks ties so
+    paging is stable. NULL started_at sorts last explicitly, because SQLite and PostgreSQL
+    disagree on where NULLs go by default.
+    """
+    conditions = []
+    if workflow_id is not None:
+        conditions.append(ExecutionEvent.workflow_id == workflow_id)
+    if status is not None:
+        conditions.append(ExecutionEvent.status == status)
+    if started_from is not None:
+        conditions.append(ExecutionEvent.started_at >= started_from)
+    if started_to is not None:
+        conditions.append(ExecutionEvent.started_at < started_to)
+
+    total = db.scalar(select(func.count()).select_from(ExecutionEvent).where(*conditions))
+    items = db.scalars(
+        select(ExecutionEvent)
+        .where(*conditions)
+        .order_by(ExecutionEvent.started_at.desc().nulls_last(), ExecutionEvent.id.desc())
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    return list(items), total

@@ -108,3 +108,10 @@ class EventRead(BaseModel):
 class EventIngestResponse(BaseModel):
     result: Literal["created", "updated", "unchanged"]
     event: EventRead
+
+
+class EventPage(BaseModel):
+    items: list[EventRead]
+    total: int = Field(description="Number of events matching the filters, ignoring paging")
+    limit: int
+    offset: int
