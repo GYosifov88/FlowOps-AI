@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_macros.html" import events_table %}
+{% block title %}Dashboard · FlowOps AI{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<section id="summary" class="grid">
+  <div class="card"><div class="n">{{ d.workflows_total }}</div><div class="l">registered workflows ({{ d.workflows_active }} active)</div></div>
+  <div class="card"><div class="n">{{ d.events_total }}</div><div class="l">recorded executions</div></div>
+</section>
+
+<h2>Executions by status</h2>
+<section id="status-counts" class="grid">
+  {% for status, n in d.status_counts.items() %}
+  <div class="card"><div class="n {{ status.value }}">{{ n }}</div><div class="l">{{ status.value }}</div></div>
+  {% endfor %}
+</section>
+
+{% if d.workflows_total == 0 and d.events_total == 0 %}
+<div id="empty-state" class="empty" style="margin-top:24px">
+  <strong>Nothing here yet.</strong>
+  Register a workflow with <code>POST /api/workflows</code> (try it in <a href="/docs">the API docs</a>),
+  then send execution events to <code>POST /api/events</code>.
+  To see sample data, run <code>python -m scripts.seed</code> while the app is running.
+</div>
+{% else %}
+<h2>Recent executions</h2>
+<section id="recent-events">
+{% if d.recent_events %}{{ events_table(d.recent_events, d.workflow_names, show_error=false) }}
+<p><a href="/events">All executions →</a></p>
+{% else %}<div class="empty">No executions recorded yet. Send one to <code>POST /api/events</code>.</div>{% endif %}
+</section>
+
+<h2>Recent failures</h2>
+<section id="recent-failures">
+{% if d.recent_failures %}{{ events_table(d.recent_failures, d.workflow_names) }}
+<p><a href="/events?status=failed">All failures →</a></p>
+{% else %}<div class="empty">No failed executions.</div>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

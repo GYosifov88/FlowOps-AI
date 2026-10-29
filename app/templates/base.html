@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}FlowOps AI{% endblock %}</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2330; --muted:#5d6879; --line:#dde1e8; --accent:#2457d6;
+          --success:#12805c; --failed:#c0262d; --running:#2457d6; --waiting:#a15c00; --canceled:#5d6879; --unknown:#7a4fb5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12161d; --card:#1b212b; --text:#e7eaf0; --muted:#98a2b3; --line:#2c3441; --accent:#7ea2ff;
+            --success:#47c08e; --failed:#ff7b81; --running:#7ea2ff; --waiting:#f0b35a; --canceled:#98a2b3; --unknown:#b99af0; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, sans-serif; }
+  header { background:var(--card); border-bottom:1px solid var(--line); }
+  nav { max-width:1100px; margin:0 auto; padding:0 16px; display:flex; gap:20px; align-items:center; flex-wrap:wrap; }
+  nav .brand { font-weight:700; padding:12px 0; }
+  nav a { color:var(--muted); text-decoration:none; padding:12px 0; border-bottom:2px solid transparent; }
+  nav a.active { color:var(--text); border-color:var(--accent); }
+  nav a.right { margin-left:auto; }
+  main { max-width:1100px; margin:0 auto; padding:20px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 16px; } h2 { font-size:16px; margin:28px 0 10px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .card .n { font-size:26px; font-weight:700; } .card .l { color:var(--muted); font-size:13px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); }
+  .wrap { overflow-x:auto; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  tr:last-child td { border-bottom:0; }
+  .badge { display:inline-block; padding:1px 9px; border-radius:999px; font-size:12px; font-weight:600; border:1px solid currentColor; }
+  .success{color:var(--success)} .failed{color:var(--failed)} .running{color:var(--running)}
+  .waiting{color:var(--waiting)} .canceled{color:var(--canceled)} .unknown{color:var(--unknown)}
+  .muted { color:var(--muted); } .err { max-width:420px; word-break:break-word; }
+  .empty { background:var(--card); border:1px dashed var(--line); border-radius:8px; padding:22px; color:var(--muted); }
+  .error { background:var(--card); border:1px solid var(--failed); color:var(--failed); border-radius:8px; padding:10px 14px; margin-bottom:14px; }
+  form.filters { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px; }
+  form.filters label { display:flex; flex-direction:column; font-size:12px; color:var(--muted); gap:3px; }
+  select, input, button { font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--text); }
+  button { background:var(--accent); color:#fff; border-color:var(--accent); cursor:pointer; }
+  a { color:var(--accent); } .pager { display:flex; gap:16px; align-items:center; margin-top:12px; }
+</style>
+</head>
+<body>
+<header><nav>
+  <span class="brand">FlowOps AI</span>
+  <a href="/" class="{{ 'active' if page == 'dashboard' }}">Dashboard</a>
+  <a href="/workflows" class="{{ 'active' if page == 'workflows' }}">Workflows</a>
+  <a href="/events" class="{{ 'active' if page == 'events' }}">Events</a>
+  <a href="/docs" class="right">API docs</a>
+</nav></header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

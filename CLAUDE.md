@@ -5,7 +5,7 @@ incrementally, one milestone at a time. Implement only the milestone asked for, 
 
 ## Stack
 Python 3.12, FastAPI, Uvicorn, Pydantic, python-dotenv, pytest, httpx2, SQLAlchemy 2.0 (SQLite).
-Coming in later milestones: Jinja2.
+Jinja2 for the server-rendered dashboard (M6).
 Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 
 ## Commands (PowerShell, from repo root, venv active: `.\venv\Scripts\Activate.ps1`)
@@ -83,6 +83,17 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   (explicit `nulls_last()`: SQLite and PostgreSQL order NULLs differently).
 - Order: `started_at` DESC, `id` DESC. `limit` 1..200 (default 50; above 200 is 422, never clamped), `offset` >= 0.
 - Unknown `workflow_id` or from > to = empty page, not an error. `error_raw` is never in a response.
+
+## Dashboard (M6)
+- HTML pages: `GET /` (dashboard), `/workflows` (`?include_inactive=true`), `/events` (filters from the
+  query string + `offset`, 25 per page). `app/routers/pages.py` (hidden from OpenAPI) -> services -> `app/templates/`.
+- Templates only render what the route hands them; no queries or logic in them. They receive `EventRead`
+  views (`dashboard.to_views`), which have NO `error_raw` field, so it cannot be rendered. Only `error_summary` is shown.
+- `/events` page reuses `events_service.query_events` (same filter/date semantics as the API; the `to` date
+  includes that whole day). Bad filter input shows a message, never a JSON error. Autoescaping is on; keep it.
+- Dashboard status counts cover ALL events (zeros included); "recent" lists are the latest 10 events / 5 failures.
+- Times: stored/passed as UTC, shown in the server's local zone via the `localtime` filter (`app/web.py`).
+- Styles are inline in `base.html` (no static files, no JS, no CDN).
 
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,

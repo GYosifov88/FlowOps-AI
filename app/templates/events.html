@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_macros.html" import events_table %}
+{% block title %}Events · FlowOps AI{% endblock %}
+{% block content %}
+<h1>Executions</h1>
+
+<form class="filters" method="get" action="/events">
+  <label>Workflow
+    <select name="workflow_id"><option value="">All</option>
+      {% for w in workflows %}<option value="{{ w.id }}" {{ 'selected' if form.workflow_id == w.id|string }}>{{ w.name }}{{ '' if w.is_active else ' (inactive)' }}</option>{% endfor %}
+    </select></label>
+  <label>Status
+    <select name="status"><option value="">All</option>
+      {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if form.status == s }}>{{ s }}</option>{% endfor %}
+    </select></label>
+  <label>Started from (inclusive)<input type="date" name="started_from" value="{{ form.started_from }}"></label>
+  <label>Started to (that day included)<input type="date" name="started_to" value="{{ form.started_to }}"></label>
+  <button type="submit">Filter</button>
+  {% if filtered %}<a href="/events">Clear</a>{% endif %}
+</form>
+<p class="muted">Dates are UTC. Executions without a start time are hidden when a date filter is used.</p>
+
+{% for message in errors %}<div class="error">{{ message }}</div>{% endfor %}
+
+{% if items %}
+<section id="events-results">
+{{ events_table(items, workflow_names) }}
+<div class="pager">
+  <span class="muted">{{ first }}–{{ last }} of {{ total }}</span>
+  {% if prev_url %}<a href="{{ prev_url }}">← Newer</a>{% endif %}
+  {% if next_url %}<a href="{{ next_url }}">Older →</a>{% endif %}
+</div>
+</section>
+{% elif not errors %}
+<div id="empty-state" class="empty">
+  {% if filtered %}No executions match these filters. <a href="/events">Clear filters</a>.
+  {% else %}No executions recorded yet. Send one to <code>POST /api/events</code>, or run <code>python -m scripts.seed</code>.{% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,20 @@
+{% macro badge(status) %}<span class="badge {{ status.value }}">{{ status.value }}</span>{% endmacro %}
+
+{# error_summary is the ONLY error text ever shown. EventRead has no error_raw field. #}
+{% macro events_table(events, names, show_error=true) %}
+<div class="wrap"><table>
+  <thead><tr><th>Started</th><th>Workflow</th><th>Status</th><th>Duration</th><th>Node</th>{% if show_error %}<th>Error</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for e in events %}
+    <tr>
+      <td>{{ e.started_at | localtime }}</td>
+      <td><a href="/events?workflow_id={{ e.workflow_id }}">{{ names.get(e.workflow_id, 'Workflow #' ~ e.workflow_id) }}</a></td>
+      <td>{{ badge(e.status) }}</td>
+      <td>{{ e.duration_ms | duration }}</td>
+      <td>{{ e.node_name or '—' }}</td>
+      {% if show_error %}<td class="err">{{ e.error_summary or '—' }}</td>{% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endmacro %}

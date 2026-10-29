@@ -4,8 +4,8 @@ Personal web app for monitoring automation workflows (initially my n8n instance)
 later, analyzing failures with an LLM. Learning + portfolio project, not a production
 service. V1 runs on **localhost only**.
 
-Current state: **M5 — event queries** (workflow CRUD, token-protected `POST /api/events` with
-upsert and error sanitizing, and `GET /api/events` with filters and paging).
+Current state: **M6 — dashboard** (HTML pages on top of the workflow CRUD, token-protected event
+ingestion and the event query API).
 
 ## Setup (Windows PowerShell)
 
@@ -28,6 +28,8 @@ python -m uvicorn app.main:app --reload
 
 - Health check: http://localhost:8000/health -> `{"status": "ok"}`
 - Interactive API docs: http://localhost:8000/docs
+- Dashboard: http://localhost:8000/ (also `/workflows` and `/events`). No login in V1, localhost only.
+  Run `python -m scripts.seed` for sample data.
 
 ## Test
 
@@ -114,7 +116,9 @@ app/
   database.py  engine, sessions, SQLite pragmas, UTC datetime column type
   models.py    Workflow, ExecutionEvent, ExecutionStatus
   schemas.py   Pydantic input/output models
-  routers/     HTTP routes (thin)
+  routers/     HTTP routes (thin); pages.py renders the HTML pages
+  templates/   Jinja2 templates
+  web.py       Jinja2 setup and display filters
   services/    database logic
   auth.py      ingest token check
   sanitize.py  error text redaction
