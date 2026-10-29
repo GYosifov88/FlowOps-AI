@@ -46,7 +46,9 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record) -> None:
 
 
 def create_db_engine(url: str) -> Engine:
-    engine = create_engine(url)
+    # hide_parameters: DB error messages would otherwise print the bound values (which
+    # can include error_raw secrets) into the application log.
+    engine = create_engine(url, hide_parameters=True)
     if engine.dialect.name == "sqlite":
         event.listen(engine, "connect", _set_sqlite_pragmas)
     return engine

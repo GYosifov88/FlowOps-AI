@@ -1,5 +1,7 @@
 """Shared fixtures. Every test gets its own fresh SQLite file under pytest's tmp_path,
 so tests are order-independent and nothing is written into the repo."""
+import logging
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
@@ -21,6 +23,23 @@ def isolate_default_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "engine", eng)
     yield
     eng.dispose()
+
+
+@pytest.fixture(autouse=True)
+def restore_logging():
+    """App startup reconfigures global logging; put it back so tests stay independent."""
+    names = ("", "uvicorn", "uvicorn.error", "uvicorn.access")
+    saved = {
+        n: (list(logging.getLogger(n).handlers), logging.getLogger(n).level,
+            logging.getLogger(n).propagate)
+        for n in names
+    }
+    yield
+    for n, (handlers, level, propagate) in saved.items():
+        lg = logging.getLogger(n)
+        lg.handlers[:] = handlers
+        lg.setLevel(level)
+        lg.propagate = propagate
 
 
 @pytest.fixture

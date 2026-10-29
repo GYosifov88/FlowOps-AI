@@ -95,6 +95,20 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - Times: stored/passed as UTC, shown in the server's local zone via the `localtime` filter (`app/web.py`).
 - Styles are inline in `base.html` (no static files, no JS, no CDN).
 
+## Observability (M6.5)
+- `app/logging_config.py`: `configure_logging(level, fmt)` runs first in `lifespan`. One tagged root handler
+  (idempotent; never `dictConfig` on root, which would wipe pytest's caplog). `LOG_LEVEL` and
+  `LOG_FORMAT` (text|json) are validated: a bad value stops startup. Log times are UTC with `Z`.
+- Every record gets `request_id` via a LogRecord factory (from `request_id_var`, "-" outside requests).
+  Use `logging.getLogger(__name__)`; never log tokens, headers, bodies or `error_raw`.
+- `app/middleware.py` (pure ASGI): `X-Request-ID` reused if `[A-Za-z0-9._-]{1,64}`, else a new uuid4 hex;
+  returned on every response; one `app.access` line per request (method, path, status, ms; no query string).
+- Unhandled exceptions: caught in that middleware, traceback logged once (`app.errors`), client gets
+  `500 {"detail": "Internal Server Error", "request_id": ...}`. Do not add `exception_handler(Exception)`.
+- Text format escapes newlines in messages (log injection); uvicorn's access log is replaced by ours.
+- Engine uses `hide_parameters=True` so DB errors don't print stored values into the log.
+- Tests: autouse `restore_logging` fixture in `tests/conftest.py` resets global logging after each test.
+
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,
   pydantic, python-dotenv, pytest, httpx2, sqlalchemy, jinja2. Ask before adding anything else.

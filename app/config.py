@@ -23,6 +23,8 @@ class Settings:
     database_url: str
     # Shared secret n8n sends in X-FlowOps-Token. The app refuses to start without it.
     ingest_token: str = ""
+    # "text" (readable) or "json" (one object per line). Validated at startup.
+    log_format: str = "text"
 
 
 def get_settings() -> Settings:
@@ -31,4 +33,5 @@ def get_settings() -> Settings:
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         database_url=os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL),
         ingest_token=os.getenv("FLOWOPS_INGEST_TOKEN", "").strip(),
+        log_format=os.getenv("LOG_FORMAT", "text"),
     )

@@ -4,6 +4,8 @@ from fastapi import FastAPI
 
 from app.config import get_settings
 from app.database import init_db
+from app.logging_config import configure_logging
+from app.middleware import RequestContextMiddleware
 from app.routers import events, pages, workflows
 
 settings = get_settings()
@@ -11,8 +13,11 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    current = get_settings()
+    # Raises on an invalid LOG_LEVEL / LOG_FORMAT, so a typo stops startup.
+    configure_logging(current.log_level, current.log_format)
     # Fail fast: never run with an unauthenticated ingest endpoint.
-    if not get_settings().ingest_token:
+    if not current.ingest_token:
         raise RuntimeError(
             "FLOWOPS_INGEST_TOKEN is not set. Add it to .env (see .env.example)."
         )
@@ -23,6 +28,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app.add_middleware(RequestContextMiddleware)
 app.include_router(workflows.router)
 app.include_router(events.router)
 app.include_router(pages.router)

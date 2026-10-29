@@ -7,7 +7,7 @@ keeps a separate, queryable history of runs with statuses, timings and sanitized
 messages. The longer-term goal is to have an LLM suggest troubleshooting steps for failures.
 
 > **Status: V1 works locally; AI analysis is not built.** This is a learning and portfolio
-> project, built one milestone at a time (M1-M6) with [Claude Code](https://claude.com/claude-code).
+> project, built one milestone at a time (M1-M6.5) with [Claude Code](https://claude.com/claude-code).
 > It is not a production service, and it does **not** talk to a real n8n instance yet:
 > today, events arrive through its own API (for example from the seed script).
 
@@ -39,11 +39,16 @@ Synthetic data from `python -m scripts.seed`.
   `to` date covers that whole day).
 - **Dashboard.** Server-rendered Jinja2 pages: counts by status, recent executions, recent
   failures, a workflows list and a filterable, paged events list, with empty states for a fresh install.
-- **Tests.** 232 pytest tests. Each test gets its own fresh SQLite file, so they are
+- **Observability.** One log format (readable text or JSON lines, UTC times) with the level from
+  `LOG_LEVEL`. Every request gets an `X-Request-ID` (reused from the caller if it sends a
+  well-formed one, so a single event can be traced end to end) that appears on every log line
+  for that request and in the response header. Unexpected errors are logged once with the full
+  traceback, while the client gets a clean `500` JSON body with the request id; no stack trace.
+- **Tests.** 272 pytest tests. Each test gets its own fresh SQLite file, so they are
   order-independent.
 
 **Not built yet:** any n8n connection, LLM analysis, LangGraph, dashboard login, HTTPS,
-migrations, structured logging.
+migrations, metrics.
 
 ## Tech stack, and why
 
@@ -124,7 +129,8 @@ that row in place (`"result": "updated"`).
 | `FLOWOPS_INGEST_TOKEN` | *(required)* | Shared secret for `POST /api/events`; the app will not start without it |
 | `DATABASE_URL` | `flowops.db` in the repo root | SQLite database |
 | `APP_NAME` | `FlowOps AI` | App title in `/docs` |
-| `LOG_LEVEL` | `INFO` | Log verbosity |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`; an invalid value stops startup |
+| `LOG_FORMAT` | `text` | `text` (readable) or `json` (one object per line) |
 | `FLOWOPS_BASE_URL` | `http://localhost:8000` | Only used by `scripts.seed` |
 
 ## Design decisions
@@ -152,7 +158,6 @@ that row in place (`"result": "updated"`).
 
 ## Roadmap (planned, none of this exists yet)
 
-- **Observability:** structured logging, a global error handler and request ids.
 - **n8n integration:** settle the pull / push design above, then implement the smallest slice.
 - **V2 - AI incident analysis:** send a failure's sanitized context to an LLM and get structured
   troubleshooting suggestions back. This needs a deliberately varied set of synthetic failures to
@@ -171,6 +176,8 @@ app/
   models.py      Workflow, ExecutionEvent, ExecutionStatus
   schemas.py     Pydantic input/output models
   auth.py        ingest token check
+  logging_config.py  log format, level, request id on every record
+  middleware.py  request id, access log, catch-all error handler
   sanitize.py    error text redaction
   timeutil.py    UTC helpers, duration, date-bound parsing
   routers/       thin HTTP routes (API and HTML pages)
