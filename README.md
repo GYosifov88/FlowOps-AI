@@ -1,132 +1,185 @@
 # FlowOps AI
 
-Personal web app for monitoring automation workflows (initially my n8n instance) and,
-later, analyzing failures with an LLM. Learning + portfolio project, not a production
-service. V1 runs on **localhost only**.
+**A small self-hosted dashboard that records automation runs (n8n first), so you can see what ran, what failed and why in one place.**
 
-Current state: **M6 — dashboard** (HTML pages on top of the workflow CRUD, token-protected event
-ingestion and the event query API).
+n8n tells you about a failure only if you go looking for it in its own execution list. FlowOps
+keeps a separate, queryable history of runs with statuses, timings and sanitized error
+messages. The longer-term goal is to have an LLM suggest troubleshooting steps for failures.
 
-## Setup (Windows PowerShell)
+> **Status: V1 works locally; AI analysis is not built.** This is a learning and portfolio
+> project, built one milestone at a time (M1-M6) with [Claude Code](https://claude.com/claude-code).
+> It is not a production service, and it does **not** talk to a real n8n instance yet:
+> today, events arrive through its own API (for example from the seed script).
+
+## Screenshots
+
+Synthetic data from `python -m scripts.seed`.
+
+![Dashboard](screenshots/dashboard.png)
+
+![Events](screenshots/events.png)
+
+![Workflows](screenshots/workflows.png)
+
+## What works today (V1)
+
+- **Workflow registry.** REST CRUD for the automations you track (name, source, external id,
+  description). Deleting is a *soft delete*: the workflow is deactivated and its history is kept.
+  A deactivated workflow can be re-activated.
+- **Event ingestion.** `POST /api/events` records one execution event.
+  - **Token auth:** a shared secret in the `X-FlowOps-Token` header, compared with
+    `secrets.compare_digest`. The app refuses to start if no token is configured.
+  - **Upsert, not just dedup:** events are keyed on `external_event_id`. A `running` event that
+    later arrives as `success`, `failed` or `canceled` updates the same row; a finished event is
+    never overwritten; an event without an id is always inserted.
+  - **Error sanitizing:** the raw error text is stored as received but never returned or
+    rendered. Only a redacted, length-capped `error_summary` is shown.
+- **Querying.** `GET /api/events` filters by workflow, status and date range, with limit/offset
+  paging and a total count. Date bounds are UTC, `from` is inclusive and `to` is exclusive (a bare
+  `to` date covers that whole day).
+- **Dashboard.** Server-rendered Jinja2 pages: counts by status, recent executions, recent
+  failures, a workflows list and a filterable, paged events list, with empty states for a fresh install.
+- **Tests.** 232 pytest tests. Each test gets its own fresh SQLite file, so they are
+  order-independent.
+
+**Not built yet:** any n8n connection, LLM analysis, LangGraph, dashboard login, HTTPS,
+migrations, structured logging.
+
+## Tech stack, and why
+
+| Piece | Why |
+|---|---|
+| **Python 3.12 + FastAPI** | Type-hint-driven validation, and interactive API docs for free at `/docs`. |
+| **Pydantic** | Separate input and output schemas, so the API never returns a raw database object. |
+| **SQLAlchemy 2.0 + SQLite** | Zero setup for a local project. Sync sessions and plain `def` routes keep it simple; SQL stays portable so PostgreSQL remains an option. |
+| **Jinja2** | A server-rendered dashboard needs no JavaScript build step, and its autoescaping is a safety net for user-supplied text. |
+| **pytest + httpx2** | Fast API tests against a real SQLite file per test. |
+| **python-dotenv** | Secrets and settings live in a git-ignored `.env`. |
+
+No frontend framework, Docker, Redis, Celery or vector database, on purpose: the project is
+small enough not to need them.
+
+## Setup and run (Windows PowerShell)
+
+Requires Python 3.12.
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
-# then set FLOWOPS_INGEST_TOKEN in .env, e.g. the output of:
+```
+
+Then open `.env` and set `FLOWOPS_INGEST_TOKEN` (required). To generate a value:
+
+```powershell
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Requires Python 3.12.
-
-## Run
+Start the app. It creates any missing database tables on startup:
 
 ```powershell
 python -m uvicorn app.main:app --reload
 ```
 
-- Health check: http://localhost:8000/health -> `{"status": "ok"}`
-- Interactive API docs: http://localhost:8000/docs
-- Dashboard: http://localhost:8000/ (also `/workflows` and `/events`). No login in V1, localhost only.
-  Run `python -m scripts.seed` for sample data.
+- Dashboard: http://localhost:8000/ (also `/workflows` and `/events`)
+- API docs: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
 
-## Test
-
-```powershell
-python -m pytest
-```
-
-## Workflow API
-
-| Method & path | Does |
-|---|---|
-| `POST /api/workflows` | create (201) |
-| `GET /api/workflows` | list active; `?include_inactive=true` for all |
-| `GET /api/workflows/{id}` | one workflow (inactive too) |
-| `PATCH /api/workflows/{id}` | partial update; `{"is_active": true}` re-activates |
-| `DELETE /api/workflows/{id}` | soft delete (204); the row and its events are kept |
-
-Try it in the interactive docs at http://localhost:8000/docs.
-
-## Event ingestion
-
-`POST /api/events` records one execution event. It needs the header `X-FlowOps-Token` (401
-otherwise). Events are upserted on `external_event_id`: a `running` event later sent as
-`success`/`failed`/`canceled` updates the same row; finished events are never overwritten.
-The response is `{"result": "created" | "updated" | "unchanged", "event": {...}}`. The raw error
-text is stored but never returned; only a redacted, length-capped `error_summary` is.
-
-With the app running, load synthetic data (safe to repeat):
+With the app running, in a second terminal, load synthetic data (safe to repeat):
 
 ```powershell
 python -m scripts.seed
 ```
 
-## Querying events
+Run the tests:
 
-`GET /api/events` (no token needed in V1) returns `{"items": [...], "total": N, "limit": 50, "offset": 0}`,
-newest first.
+```powershell
+python -m pytest
+```
 
-| Parameter | Meaning |
-|---|---|
-| `workflow_id`, `status` | exact match (`success`, `failed`, `running`, `waiting`, `canceled`, `unknown`) |
-| `started_from` | `started_at >=` this, inclusive |
-| `started_to` | `started_at <` this, exclusive; a bare date like `2026-10-27` covers all of that day |
-| `limit`, `offset` | paging; `limit` 1-200 (default 50), above 200 is a 422 |
-
-Dates are UTC (a bare date is 00:00 UTC; URL-encode a `+` offset as `%2B`). Events with no
-`started_at` are left out whenever `started_from` or `started_to` is used.
-
-## Configuration
-
-Settings come from environment variables, loaded from a local `.env` file via
-python-dotenv. `.env` is git-ignored; `.env.example` is the committed template.
-
-| Variable       | Default                      | Purpose            |
-|----------------|------------------------------|--------------------|
-| `APP_NAME`     | `FlowOps AI`                 | App title in /docs |
-| `LOG_LEVEL`    | `INFO`                       | Log verbosity      |
-| `DATABASE_URL` | `flowops.db` in the repo root | SQLite database    |
-| `FLOWOPS_INGEST_TOKEN` | *(required)*        | Shared secret for `POST /api/events`; the app will not start without it |
-| `FLOWOPS_BASE_URL` | `http://localhost:8000`     | Only used by `scripts.seed` |
-
-## Database
-
-The app creates any missing tables when it starts, so a fresh checkout works without setup
-(it never drops or alters existing tables, and never adds data).
-
-The database is **throwaway during V1**: there are no migrations. After changing the
-schema, delete and recreate it (this erases all data):
+To wipe the database and start over (**deletes all data**; stop the app first):
 
 ```powershell
 python -m scripts.reset_db --yes
 ```
 
-Run it from the repo root with the app stopped. It only works on SQLite. SQLite runs in WAL
-mode, so you will also see `flowops.db-wal` and `flowops.db-shm` next to the database
-file; both are git-ignored.
+### Try the API
 
-## Layout
+After seeding, workflow `1` exists. Send an event (replace the token with yours):
+
+```powershell
+$body = @{ workflow_id = 1; external_event_id = "demo-1"; status = "running"; started_at = "2026-10-27T09:00:00Z" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/events `
+  -Headers @{ "X-FlowOps-Token" = "<your token>" } -ContentType "application/json" -Body $body
+```
+
+Sending the same `external_event_id` again with `status = "success"` and a `finished_at` updates
+that row in place (`"result": "updated"`).
+
+### Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `FLOWOPS_INGEST_TOKEN` | *(required)* | Shared secret for `POST /api/events`; the app will not start without it |
+| `DATABASE_URL` | `flowops.db` in the repo root | SQLite database |
+| `APP_NAME` | `FlowOps AI` | App title in `/docs` |
+| `LOG_LEVEL` | `INFO` | Log verbosity |
+| `FLOWOPS_BASE_URL` | `http://localhost:8000` | Only used by `scripts.seed` |
+
+## Design decisions
+
+- **Upsert for events.** n8n reports a run as "running" and later as finished. Plain
+  de-duplication would leave every execution stuck in `running`, so a non-finished event may be
+  completed exactly once, and a finished one is final.
+- **Raw errors are never shown.** Error payloads can contain tokens and personal data. They are
+  stored as received but have no field in any API response or template; only the redacted summary
+  does. The redaction is best-effort (it covers obvious patterns like bearer tokens, API keys and
+  passwords) and is not a guarantee, which is why the raw text is never exposed at all.
+- **UTC everywhere in storage.** Timestamps are stored as naive UTC, returned by the API with
+  an explicit `Z`, and converted to local time only for display in the dashboard.
+- **Throwaway database in V1.** There are no migrations. Any schema change means deleting the
+  database and re-seeding (`reset_db`). Alembic is planned for a later phase, once there is data
+  worth keeping. Startup only creates missing tables; it never alters or drops anything.
+- **Localhost-only, no login on the dashboard.** This is a deliberate V1 assumption, not an
+  oversight. Writing events needs the token, but reading the dashboard and `GET /api/events` does
+  not. Before this is exposed to a network, the dashboard needs authentication and HTTPS.
+- **Planned two-channel ingestion (design only, nothing built).** The working hypothesis for
+  connecting n8n is to use both channels: *pull* from n8n's REST API for completeness, and *push*
+  from its Error Trigger for fast failure alerts. Push alone cannot work for a dashboard, because
+  the Error Trigger fires only on failures, so success counts would be missing. Pull has its own
+  catch: n8n prunes old executions. This will be argued against and settled before any code.
+
+## Roadmap (planned, none of this exists yet)
+
+- **Observability:** structured logging, a global error handler and request ids.
+- **n8n integration:** settle the pull / push design above, then implement the smallest slice.
+- **V2 - AI incident analysis:** send a failure's sanitized context to an LLM and get structured
+  troubleshooting suggestions back. This needs a deliberately varied set of synthetic failures to
+  evaluate against, since real failures will be few and similar.
+- **V3 - LangGraph:** multi-step incident analysis with conditional routing, state and a human
+  approval step.
+- **Hardening:** migrations (Alembic), dashboard authentication and HTTPS before any deployment.
+
+## Project layout
 
 ```
 app/
-  main.py      FastAPI app and routes
-  config.py    environment-based settings
-  database.py  engine, sessions, SQLite pragmas, UTC datetime column type
-  models.py    Workflow, ExecutionEvent, ExecutionStatus
-  schemas.py   Pydantic input/output models
-  routers/     HTTP routes (thin); pages.py renders the HTML pages
-  templates/   Jinja2 templates
-  web.py       Jinja2 setup and display filters
-  services/    database logic
-  auth.py      ingest token check
-  sanitize.py  error text redaction
-  timeutil.py  utcnow(), to_naive_utc(), compute_duration_ms()
-scripts/
-  reset_db.py  delete and recreate the database
-  seed.py      post synthetic data to a running app
-tests/
-  conftest.py  fresh-database fixtures
-  test_*.py
+  main.py        FastAPI app, startup (token check, table creation)
+  config.py      settings from environment variables
+  database.py    engine, sessions, SQLite settings, UTC datetime type
+  models.py      Workflow, ExecutionEvent, ExecutionStatus
+  schemas.py     Pydantic input/output models
+  auth.py        ingest token check
+  sanitize.py    error text redaction
+  timeutil.py    UTC helpers, duration, date-bound parsing
+  routers/       thin HTTP routes (API and HTML pages)
+  services/      all database logic
+  templates/     Jinja2 templates
+scripts/         reset_db.py, seed.py
+tests/           pytest suite (fresh database per test)
+screenshots/     images used in this README
 ```
+
+`CLAUDE.md` records the project's conventions (timestamp handling, sync sessions, database
+portability) for the AI assistant used to build it.
