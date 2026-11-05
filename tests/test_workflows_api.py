@@ -244,3 +244,47 @@ def test_events_of_a_deactivated_workflow_are_still_readable(client, db_session)
         ExecutionStatus.FAILED,
         ExecutionStatus.SUCCESS,
     ]
+
+
+# ---------- unique (source, external_id) ----------
+
+
+def test_the_same_external_id_under_the_same_source_is_a_409(client):
+    make(client, source="n8n", external_id="abc")
+
+    response = client.post(URL, json={"name": "Second", "source": "n8n", "external_id": "abc"})
+
+    assert response.status_code == 409
+    assert "already exists" in response.json()["detail"]
+    assert len(client.get(URL).json()) == 1
+
+
+def test_the_same_external_id_under_another_source_is_fine(client):
+    make(client, source="n8n", external_id="abc")
+
+    assert client.post(URL, json={"name": "Z", "source": "zapier", "external_id": "abc"}).status_code == 201
+
+
+def test_workflows_without_an_external_id_never_collide(client):
+    make(client, name="A")
+    make(client, name="B")
+
+    assert len(client.get(URL).json()) == 2
+
+
+def test_patching_to_a_taken_external_id_is_a_409_and_changes_nothing(client):
+    make(client, source="n8n", external_id="taken")
+    other = make(client, name="Other", source="n8n", external_id="free")
+
+    response = client.patch(f"{URL}/{other['id']}", json={"external_id": "taken"})
+
+    assert response.status_code == 409
+    assert client.get(f"{URL}/{other['id']}").json()["external_id"] == "free"
+
+
+def test_a_deactivated_workflow_keeps_its_external_id(client):
+    first = make(client, source="n8n", external_id="abc")
+    client.delete(f"{URL}/{first['id']}")
+
+    assert client.post(URL, json={"name": "Again", "source": "n8n", "external_id": "abc"}).status_code == 409
+    assert client.patch(f"{URL}/{first['id']}", json={"is_active": True}).status_code == 200

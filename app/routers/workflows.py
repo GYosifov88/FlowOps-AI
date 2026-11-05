@@ -9,13 +9,23 @@ router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
 
 
+def duplicate() -> HTTPException:
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        "A workflow with this source and external_id already exists",
+    )
+
+
 def not_found() -> HTTPException:
     return HTTPException(status.HTTP_404_NOT_FOUND, "Workflow not found")
 
 
 @router.post("", response_model=WorkflowRead, status_code=status.HTTP_201_CREATED)
 def create_workflow(data: WorkflowCreate, db: Session = Depends(get_db)):
-    return service.create_workflow(db, data)
+    try:
+        return service.create_workflow(db, data)
+    except service.DuplicateWorkflow:
+        raise duplicate()
 
 
 @router.get("", response_model=list[WorkflowRead])
@@ -38,7 +48,10 @@ def update_workflow(
     workflow_id: int, data: WorkflowUpdate, db: Session = Depends(get_db)
 ):
     """Partial update. Send `is_active: true` to re-activate a deactivated workflow."""
-    workflow = service.update_workflow(db, workflow_id, data)
+    try:
+        workflow = service.update_workflow(db, workflow_id, data)
+    except service.DuplicateWorkflow:
+        raise duplicate()
     if workflow is None:
         raise not_found()
     return workflow

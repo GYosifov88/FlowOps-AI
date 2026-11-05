@@ -6,7 +6,7 @@ and no cascade, and the foreign key is ON DELETE RESTRICT, so events are never o
 import enum
 from datetime import datetime
 
-from sqlalchemy import Enum, ForeignKey, String, Text
+from sqlalchemy import Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, NaiveUTCDateTime
@@ -40,13 +40,19 @@ NON_TERMINAL = frozenset(
 
 class Workflow(Base):
     __tablename__ = "workflows"
+    # One FlowOps workflow per (source system, id in that system). NULL external_ids never
+    # collide, so workflows without one stay unrestricted.
+    __table_args__ = (
+        UniqueConstraint("source", "external_id", name="uq_workflows_source_external_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(100))
-    # The workflow id in the source system (e.g. n8n). Indexed, not unique; M7 decides.
-    external_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    # The workflow id in the source system (e.g. n8n), always a string. Unique together
+    # with `source`; that composite unique index also serves lookups by (source, external_id).
+    external_id: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(NaiveUTCDateTime, default=utcnow)
 

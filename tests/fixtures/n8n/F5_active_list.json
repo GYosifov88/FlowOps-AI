@@ -26,7 +26,7 @@
         "executionOrder": "v1",
         "binaryMode": "separate",
         "timeSavedMode": "fixed",
-        "errorWorkflow": "4IT7YVKtKddFxI0B",
+        "errorWorkflow": "wf_fixture_005",
         "callerPolicy": "workflowsFromSameOwner",
         "availableInMCP": false
       }
@@ -39,7 +39,7 @@
         "executionOrder": "v1",
         "binaryMode": "separate",
         "timeSavedMode": "fixed",
-        "errorWorkflow": "9WeOI3YIdKetrzaK",
+        "errorWorkflow": "wf_fixture_006",
         "callerPolicy": "workflowsFromSameOwner",
         "availableInMCP": false
       }

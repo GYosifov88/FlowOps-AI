@@ -44,11 +44,16 @@ Synthetic data from `python -m scripts.seed`.
   well-formed one, so a single event can be traced end to end) that appears on every log line
   for that request and in the response header. Unexpected errors are logged once with the full
   traceback, while the client gets a clean `500` JSON body with the request id; no stack trace.
-- **Tests.** 272 pytest tests. Each test gets its own fresh SQLite file, so they are
+- **n8n pull sync.** `python -m scripts.sync_n8n` reads the executions of the n8n workflows you
+  registered and feeds them through the same upsert. It is read-only towards n8n (GET requests
+  only), asks for execution *data* only for failed runs, and keeps just the error's name,
+  message, stack and failing node name, never the run data. Developed against recorded (scrubbed)
+  n8n responses; see "Syncing from n8n" below.
+- **Tests.** 438 pytest tests. Each test gets its own fresh SQLite file, so they are
   order-independent.
 
-**Not built yet:** any n8n connection, LLM analysis, LangGraph, dashboard login, HTTPS,
-migrations, metrics.
+**Not built yet:** push from n8n, a scheduler inside the app, LLM analysis, LangGraph, dashboard
+login, HTTPS, migrations, metrics.
 
 ## Tech stack, and why
 
@@ -122,11 +127,46 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/events `
 Sending the same `external_event_id` again with `status = "success"` and a `finished_at` updates
 that row in place (`"result": "updated"`).
 
+### Syncing from n8n
+
+1. In `.env`, set `N8N_BASE_URL` (for example `https://your-n8n-host`) and `N8N_API_KEY` (an n8n
+   API key; create it in n8n under Settings, API). The URL must be `https` unless it is localhost.
+2. Register each n8n workflow you want tracked, with its n8n id as `external_id` and `source`
+   `n8n` (the pair must be unique; a duplicate gets a 409):
+
+```powershell
+$body = @{ name = "My workflow"; source = "n8n"; external_id = "<the workflow id from n8n's URL>" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/workflows -ContentType "application/json" -Body $body
+```
+
+3. Run the sync (the app does not need to be running):
+
+```powershell
+python -m scripts.sync_n8n              # one run
+python -m scripts.sync_n8n --loop 300   # repeat every 5 minutes (Ctrl+C to stop)
+```
+
+Each run prints per-workflow counts (created / updated / unchanged / skipped), warnings, and the
+active n8n workflows that are not registered in FlowOps (they are reported, never imported). For
+unattended runs, schedule the one-shot command with Windows Task Scheduler every 5 minutes.
+
+Things to know:
+- The first run imports everything n8n still has. n8n prunes old executions (by default after 14
+  days or 10,000 executions), so FlowOps can only recover what n8n still holds; if a run finds
+  that executions were pruned since the last one, it warns about a "possible gap".
+- Unfinished executions are re-checked on later runs: for 24 hours (running/unknown) or 30 days
+  (waiting).
+- It warns when a workflow's settings tell n8n not to save executions, because then there is
+  nothing to sync.
+- Exit codes: 0 ok, 1 n8n unreachable or rejected the key, 2 configuration problem.
+
 ### Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `FLOWOPS_INGEST_TOKEN` | *(required)* | Shared secret for `POST /api/events`; the app will not start without it |
+| `N8N_BASE_URL` | *(sync only)* | Your n8n address, `https` unless localhost |
+| `N8N_API_KEY` | *(sync only)* | n8n API key; sent only to that address, never logged |
 | `DATABASE_URL` | `flowops.db` in the repo root | SQLite database |
 | `APP_NAME` | `FlowOps AI` | App title in `/docs` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`; an invalid value stops startup |
@@ -150,15 +190,23 @@ that row in place (`"result": "updated"`).
 - **Localhost-only, no login on the dashboard.** This is a deliberate V1 assumption, not an
   oversight. Writing events needs the token, but reading the dashboard and `GET /api/events` does
   not. Before this is exposed to a network, the dashboard needs authentication and HTTPS.
-- **Planned two-channel ingestion (design only, nothing built).** The working hypothesis for
-  connecting n8n is to use both channels: *pull* from n8n's REST API for completeness, and *push*
-  from its Error Trigger for fast failure alerts. Push alone cannot work for a dashboard, because
-  the Error Trigger fires only on failures, so success counts would be missing. Pull has its own
-  catch: n8n prunes old executions. This will be argued against and settled before any code.
+- **Pull, not push, for n8n.** The first idea was to use both channels: pull from n8n's REST API
+  for completeness and push from its Error Trigger for fast failure alerts. I argued against it
+  and chose pull only. Push alone could not feed a dashboard (the Error Trigger fires only on
+  failures, so success counts would be missing), and FlowOps has no alerting that would use the
+  extra speed. Push would also need FlowOps reachable from outside, which breaks the
+  localhost-only assumption, and a push to a laptop that is asleep is lost, while a pull simply
+  catches up. Push stays deferred, with written conditions for reconsidering it.
+- **The failing node comes only from the error itself.** n8n also reports the last node that
+  ran, but that is not necessarily the node that failed, so it is never used. If n8n gives no
+  node, the field stays empty rather than being filled with a guess.
+- **Minimal data from n8n.** Execution data can hold customer data, so it is requested only for
+  failed runs and only the error's own fields are kept; everything else is discarded unread.
 
 ## Roadmap (planned, none of this exists yet)
 
-- **n8n integration:** settle the pull / push design above, then implement the smallest slice.
+- **n8n integration, next steps:** show detected gaps and unmonitored workflows on the dashboard,
+  and flag workflows that went quiet. Push stays deferred unless alerting is added.
 - **V2 - AI incident analysis:** send a failure's sanitized context to an LLM and get structured
   troubleshooting suggestions back. This needs a deliberately varied set of synthetic failures to
   evaluate against, since real failures will be few and similar.
@@ -180,10 +228,11 @@ app/
   middleware.py  request id, access log, catch-all error handler
   sanitize.py    error text redaction
   timeutil.py    UTC helpers, duration, date-bound parsing
+  n8n_client.py  read-only (GET-only) n8n API client
   routers/       thin HTTP routes (API and HTML pages)
-  services/      all database logic
+  services/      all database logic; n8n_sync.py is the pull sync
   templates/     Jinja2 templates
-scripts/         reset_db.py, seed.py
+scripts/         reset_db.py, seed.py, sync_n8n.py
 tests/           pytest suite (fresh database per test)
 screenshots/     images used in this README
 ```

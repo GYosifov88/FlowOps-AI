@@ -42,21 +42,26 @@ class IngestResult:
     event: ExecutionEvent
 
 
-def ingest_event(db: Session, data: EventCreate) -> IngestResult:
+def ingest_event(
+    db: Session, data: EventCreate, *, summary_source: str | None = None
+) -> IngestResult:
+    """Upsert one event. `summary_source` is the text to sanitize into error_summary;
+    by default that is error_raw. The n8n sync passes readable text there, because its
+    error_raw is a JSON string."""
     if db.get(Workflow, data.workflow_id) is None:  # inactive workflows are accepted
         raise WorkflowNotFound
 
     existing = _find(db, data.external_event_id)
     if existing is None:
         try:
-            return IngestResult("created", _insert(db, data))
+            return IngestResult("created", _insert(db, data, summary_source))
         except IntegrityError:
             # Lost a race against a concurrent insert of the same external_event_id.
             db.rollback()
             existing = _find(db, data.external_event_id)
             if existing is None:
                 raise
-    return _apply_to_existing(db, existing, data)
+    return _apply_to_existing(db, existing, data, summary_source)
 
 
 def _find(db: Session, external_event_id: str | None) -> ExecutionEvent | None:
@@ -69,7 +74,9 @@ def _find(db: Session, external_event_id: str | None) -> ExecutionEvent | None:
     )
 
 
-def _insert(db: Session, data: EventCreate) -> ExecutionEvent:
+def _insert(
+    db: Session, data: EventCreate, summary_source: str | None = None
+) -> ExecutionEvent:
     started_at = to_naive_utc(data.started_at)
     finished_at = to_naive_utc(data.finished_at)
     event = ExecutionEvent(
@@ -81,7 +88,9 @@ def _insert(db: Session, data: EventCreate) -> ExecutionEvent:
         duration_ms=compute_duration_ms(started_at, finished_at),
         node_name=data.node_name,
         mode=data.mode,
-        error_summary=sanitize_error(data.error_raw),
+        error_summary=sanitize_error(
+            summary_source if summary_source is not None else data.error_raw
+        ),
         error_raw=data.error_raw,  # stored exactly as received
     )
     db.add(event)
@@ -91,7 +100,10 @@ def _insert(db: Session, data: EventCreate) -> ExecutionEvent:
 
 
 def _apply_to_existing(
-    db: Session, event: ExecutionEvent, data: EventCreate
+    db: Session,
+    event: ExecutionEvent,
+    data: EventCreate,
+    summary_source: str | None = None,
 ) -> IngestResult:
     if event.workflow_id != data.workflow_id:
         raise EventOwnerMismatch
@@ -114,9 +126,12 @@ def _apply_to_existing(
     event.status = data.status
     event.finished_at = to_naive_utc(data.finished_at)
     event.duration_ms = compute_duration_ms(event.started_at, event.finished_at)
-    if data.error_raw is not None:
-        event.error_raw = data.error_raw
-        event.error_summary = sanitize_error(data.error_raw)
+    if data.error_raw is not None or summary_source is not None:
+        if data.error_raw is not None:
+            event.error_raw = data.error_raw
+        event.error_summary = sanitize_error(
+            summary_source if summary_source is not None else data.error_raw
+        )
     if event.node_name is None:
         event.node_name = data.node_name
     if event.mode is None:

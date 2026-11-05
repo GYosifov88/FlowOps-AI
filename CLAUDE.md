@@ -13,6 +13,7 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - Run app:  `python -m uvicorn app.main:app --reload`  (http://localhost:8000, docs at /docs)
 - Run tests: `python -m pytest`
 - Seed synthetic data (app must be running): `python -m scripts.seed`  (safe to repeat)
+- Pull n8n executions (needs N8N_BASE_URL + N8N_API_KEY in `.env`): `python -m scripts.sync_n8n` (`--loop 300` to repeat)
 - Reset the DB (DESTRUCTIVE, deletes all data): `python -m scripts.reset_db --yes`
   (run from the repo root; SQLite only; stop the app first)
 
@@ -35,6 +36,8 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   naive in -> assumed UTC; always naive out). Use `app.timeutil.utcnow()` for "now" and
   `compute_duration_ms()` for durations (None, never 0, when it cannot be known).
 - Soft delete only: `is_active=False`. FK is `ON DELETE RESTRICT`, no cascade, no hard-delete code.
+- `Workflow` has UNIQUE (`source`, `external_id`) (M8; NULL external_ids never collide). A duplicate on
+  POST/PATCH `/api/workflows` is a 409 (`DuplicateWorkflow`). Adding it needed a DB reset.
 - `error_raw` is stored as received and NEVER rendered or returned; only the sanitized
   `error_summary` may be shown.
 - SQLite pragmas (WAL, busy_timeout=5000, foreign_keys=ON) are set by a connect listener
@@ -108,6 +111,28 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - Text format escapes newlines in messages (log injection); uvicorn's access log is replaced by ours.
 - Engine uses `hide_parameters=True` so DB errors don't print stored values into the log.
 - Tests: autouse `restore_logging` fixture in `tests/conftest.py` resets global logging after each test.
+
+## n8n pull sync (M8)
+- Pull only (M7 decision: push deferred). `app/n8n_client.py` is GET-only (no write methods; `https` required
+  unless localhost; no redirects; errors never carry the key or response bodies). `app/services/n8n_sync.py`
+  does the work and writes through `ingest_event(..., summary_source=...)`; `scripts/sync_n8n.py` is the CLI
+  (exit 0 ok / 1 n8n problem / 2 config). Run it as its own process; the web app does not schedule anything.
+- Registered = `source == "n8n"`, active, `external_id` = the n8n workflow id (a string). Unregistered active
+  n8n workflows are only REPORTED. `external_event_id` is `n8n:<execution id>`.
+- Per workflow: list executions newest-first, ingest OLDEST first (one commit each), stop the walk at a known
+  finished execution older than 24 h before FlowOps's newest (overlap window, so late finishers are seen), then
+  re-check FlowOps's own non-finished rows (24 h give-up; 30 days for waiting). Pruned history -> "possible gap".
+- Status: success; error/crashed -> failed; canceled; waiting; running/new -> running; unknown; null -> running
+  (no stoppedAt) else unknown. `finished_at` is set only for terminal statuses.
+- `node_name` comes ONLY from `resultData.error.node.name`; never from the last-node-executed field. Absent -> NULL.
+- Data minimisation: the list call never asks for data; `includeData=true` only for executions that map to
+  `failed`, one at a time; `ignoreDataSizeLimit`/`redactExecutionData` are never sent. `extract_error` is an
+  ALLOW-LIST (name, message, description, httpCode, stack, node NAME); the rest of `error.node` (it carries
+  credentials and parameters), runData, pinData, workflowData and customData are never kept or logged.
+- Tests never touch a network: `tests/n8n_helpers.py` has `FakeN8n`; `tests/fixtures/n8n/` holds SCRUBBED real
+  responses (fake ids/domains; `tests/test_fixtures_clean.py` guards them). Never commit unscrubbed captures.
+- The assistant must NOT run the live sync against the real n8n instance: error text can hold customer data.
+  The user runs it and reports counts.
 
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,

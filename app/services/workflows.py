@@ -3,16 +3,29 @@
 Workflows are never hard-deleted: "delete" means is_active=False.
 """
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import Workflow
 from app.schemas import WorkflowCreate, WorkflowUpdate
 
 
+class DuplicateWorkflow(Exception):
+    """Another workflow already has this (source, external_id)."""
+
+
+def _commit_or_duplicate(db: Session) -> None:
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise DuplicateWorkflow from None
+
+
 def create_workflow(db: Session, data: WorkflowCreate) -> Workflow:
     workflow = Workflow(**data.model_dump())
     db.add(workflow)
-    db.commit()
+    _commit_or_duplicate(db)
     db.refresh(workflow)
     return workflow
 
@@ -37,7 +50,7 @@ def update_workflow(
         return None
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(workflow, field, value)
-    db.commit()
+    _commit_or_duplicate(db)
     db.refresh(workflow)
     return workflow
 

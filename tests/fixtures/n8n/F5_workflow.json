@@ -6,7 +6,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate",
     "timeSavedMode": "fixed",
-    "errorWorkflow": "4IT7YVKtKddFxI0B",
+    "errorWorkflow": "wf_fixture_005",
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   }

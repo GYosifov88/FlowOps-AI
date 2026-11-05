@@ -215,9 +215,11 @@ def test_no_delete_cascade_is_configured():
 def test_schema_has_the_expected_indexes(engine):
     inspector = inspect(engine)
 
-    workflow_indexes = inspector.get_indexes("workflows")
-    external_id = next(i for i in workflow_indexes if i["column_names"] == ["external_id"])
-    assert not external_id["unique"]  # indexed, deliberately not unique (M7 decides)
+    pair = next(
+        c for c in inspector.get_unique_constraints("workflows")
+        if c["column_names"] == ["source", "external_id"]
+    )
+    assert pair["name"] == "uq_workflows_source_external_id"
 
     event_indexes = inspector.get_indexes("execution_events")
     assert any(i["column_names"] == ["workflow_id"] for i in event_indexes)
