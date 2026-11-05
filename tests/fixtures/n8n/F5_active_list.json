@@ -1,0 +1,49 @@
+{
+  "data": [
+    {
+      "id": "wf_fixture_004",
+      "name": "Example Workflow 4",
+      "active": true,
+      "settings": {
+        "executionOrder": "v1",
+        "binaryMode": "separate"
+      }
+    },
+    {
+      "id": "wf_fixture_003",
+      "name": "Example Workflow 3",
+      "active": true,
+      "settings": {
+        "executionOrder": "v1",
+        "binaryMode": "separate"
+      }
+    },
+    {
+      "id": "wf_fixture_001",
+      "name": "Example — Social Media Automation",
+      "active": true,
+      "settings": {
+        "executionOrder": "v1",
+        "binaryMode": "separate",
+        "timeSavedMode": "fixed",
+        "errorWorkflow": "4IT7YVKtKddFxI0B",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+      }
+    },
+    {
+      "id": "wf_fixture_002",
+      "name": "Example Workflow 2",
+      "active": true,
+      "settings": {
+        "executionOrder": "v1",
+        "binaryMode": "separate",
+        "timeSavedMode": "fixed",
+        "errorWorkflow": "9WeOI3YIdKetrzaK",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+      }
+    }
+  ],
+  "nextCursor": null
+}

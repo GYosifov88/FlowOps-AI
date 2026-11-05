@@ -1,0 +1,53 @@
+{
+  "data": [
+    {
+      "id": "20631",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-24T06:20:15.384Z",
+      "stoppedAt": "2026-10-24T06:21:00.592Z",
+      "workflowId": "wf_fixture_001",
+      "waitTill": null
+    },
+    {
+      "id": "20630",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-24T06:18:44.774Z",
+      "stoppedAt": "2026-10-24T06:19:04.385Z",
+      "workflowId": "wf_fixture_001",
+      "waitTill": null
+    },
+    {
+      "id": "20629",
+      "finished": true,
+      "mode": "manual",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-24T06:17:02.626Z",
+      "stoppedAt": "2026-10-24T06:17:22.464Z",
+      "workflowId": "wf_fixture_001",
+      "waitTill": null
+    },
+    {
+      "id": "20628",
+      "finished": false,
+      "mode": "manual",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "error",
+      "startedAt": "2026-10-24T06:16:26.875Z",
+      "stoppedAt": "2026-10-24T06:16:27.509Z",
+      "workflowId": "wf_fixture_001",
+      "waitTill": null
+    }
+  ],
+  "nextCursor": null
+}

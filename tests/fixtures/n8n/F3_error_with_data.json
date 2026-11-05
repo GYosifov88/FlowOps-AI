@@ -1,0 +1,36 @@
+{
+  "id": "20628",
+  "finished": false,
+  "mode": "manual",
+  "retryOf": null,
+  "retrySuccessId": null,
+  "status": "error",
+  "createdAt": "2026-10-24T06:16:26.841Z",
+  "startedAt": "2026-10-24T06:16:26.875Z",
+  "stoppedAt": "2026-10-24T06:16:27.509Z",
+  "deletedAt": null,
+  "workflowId": "wf_fixture_001",
+  "waitTill": null,
+  "storedAt": "db",
+  "tracingContext": null,
+  "deduplicationKey": null,
+  "jsonSizeBytes": 123381,
+  "binaryDataSizeBytes": 0,
+  "workflowVersionId": "7bec9bf2-90bc-42ca-991b-94c68e0a77e1",
+  "usedPrivateCredentials": false,
+  "data": {
+    "resultData": {
+      "error": {
+        "description": "Access could not be refreshed because the connected account has revoked access, the refresh token expired, or the account password or permissions changed. Open the credential and reconnect it to continue.",
+        "name": "NodeApiError",
+        "httpCode": null,
+        "message": "The credential \"Example-marketing\" needs to be reconnected.",
+        "stack": "NodeApiError: The credential \"Example-marketing\" needs to be reconnected.\n    at ExecuteContext.apiRequest (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-nodes-base@file++++home+runner+_work+n8n+n8n+packages+nodes-base/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/transport/index.ts:80:9)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at GoogleSheet.spreadsheetGetSheet (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-nodes-base@file++++home+runner+_work+n8n+n8n+packages+nodes-base/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/helpers/GoogleSheet.ts:141:21)\n    at ExecuteContext.router (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-nodes-base@file++++home+runner+_work+n8n+n8n+packages+nodes-base/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/actions/router.ts:43:20)\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-nodes-base@file++++home+runner+_work+n8n+n8n+packages+nodes-base/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/GoogleSheetsV2.node.ts:30:10)\n    at WorkflowExecute.executeNode (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file++++home+runner+_work+n8n+n8n+packages+core/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1154:8)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file++++home+runner+_work+n8n+n8n+packages+core/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at /usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file++++home+runner+_work+n8n+n8n+packages+core/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:2377:27\n    at /usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file++++home+runner+_work+n8n+n8n+packages+core/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:2858:11",
+        "node": {
+          "name": "SHEETS — Load Settings"
+        }
+      },
+      "lastNodeExecuted": "SHEETS — Load Settings"
+    }
+  }
+}

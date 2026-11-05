@@ -1,0 +1,65 @@
+{
+  "data": [
+    {
+      "id": "20637",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-30T19:04:25.784Z",
+      "stoppedAt": "2026-10-30T19:05:12.399Z",
+      "workflowId": "wf_fixture_001",
+      "waitTill": null
+    },
+    {
+      "id": "20636",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-30T19:03:55.504Z",
+      "stoppedAt": "2026-10-30T19:04:01.845Z",
+      "workflowId": "wf_fixture_001",
+      "waitTill": null
+    },
+    {
+      "id": "20635",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-30T18:59:31.863Z",
+      "stoppedAt": "2026-10-30T18:59:34.819Z",
+      "workflowId": "wf_fixture_001",
+      "waitTill": null
+    },
+    {
+      "id": "20634",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-30T18:54:07.514Z",
+      "stoppedAt": "2026-10-30T18:54:36.402Z",
+      "workflowId": "wf_fixture_001",
+      "waitTill": null
+    },
+    {
+      "id": "20633",
+      "finished": true,
+      "mode": "trigger",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-30T16:00:49.130Z",
+      "stoppedAt": "2026-10-30T16:01:16.372Z",
+      "workflowId": "wf_fixture_001",
+      "waitTill": null
+    }
+  ],
+  "nextCursor": "eyJsYXN0SWQiOiIyMDYzMyIsImxpbWl0Ijo1fQ=="
+}

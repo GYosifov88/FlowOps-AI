@@ -1,0 +1,21 @@
+{
+  "id": "20637",
+  "finished": true,
+  "mode": "webhook",
+  "retryOf": null,
+  "retrySuccessId": null,
+  "status": "success",
+  "createdAt": "2026-10-30T19:04:25.774Z",
+  "startedAt": "2026-10-30T19:04:25.784Z",
+  "stoppedAt": "2026-10-30T19:05:12.399Z",
+  "deletedAt": null,
+  "workflowId": "wf_fixture_001",
+  "waitTill": null,
+  "storedAt": "db",
+  "tracingContext": null,
+  "deduplicationKey": null,
+  "jsonSizeBytes": 180693,
+  "binaryDataSizeBytes": 0,
+  "workflowVersionId": "7bec9bf2-90bc-42ca-991b-94c68e0a77e1",
+  "usedPrivateCredentials": false
+}
