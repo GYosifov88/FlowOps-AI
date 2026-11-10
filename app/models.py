@@ -1,4 +1,4 @@
-"""Database models: Workflow and ExecutionEvent.
+"""Database models: Workflow, ExecutionEvent and Incident.
 
 Deletion policy: workflows are SOFT-deleted via is_active=False. There is no hard delete
 and no cascade, and the foreign key is ON DELETE RESTRICT, so events are never orphaned.
@@ -36,6 +36,13 @@ TERMINAL = frozenset(
 NON_TERMINAL = frozenset(
     {ExecutionStatus.RUNNING, ExecutionStatus.WAITING, ExecutionStatus.UNKNOWN}
 )
+
+
+class IncidentStatus(enum.StrEnum):
+    """Lifecycle of an incident. Only OPEN exists in V2-M1; acknowledged / resolved /
+    regressed arrive with the approval model (V2-M4)."""
+
+    OPEN = "open"
 
 
 class Workflow(Base):
@@ -82,7 +89,8 @@ class ExecutionEvent(Base):
     finished_at: Mapped[datetime | None] = mapped_column(NaiveUTCDateTime)
     # None unless both timestamps exist; see app.timeutil.compute_duration_ms.
     duration_ms: Mapped[int | None]
-    # The last node that ran; not necessarily the one that failed.
+    # The node that FAILED, from the error's own node (n8n sync, M8); NULL when unknown.
+    # Never the last node that ran. Incident signatures group by it.
     node_name: Mapped[str | None] = mapped_column(String(255))
     mode: Mapped[str | None] = mapped_column(String(50))
     # Sanitized and length-capped; the only error text that may be rendered.
@@ -90,5 +98,46 @@ class ExecutionEvent(Base):
     # Original error payload, stored as received. NEVER render or return it.
     error_raw: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(NaiveUTCDateTime, default=utcnow)
+    # Set only for FAILED events (V2-M1), automatically when the event becomes failed.
+    incident_id: Mapped[int | None] = mapped_column(
+        ForeignKey("incidents.id", ondelete="RESTRICT"), index=True
+    )
 
     workflow: Mapped[Workflow] = relationship(back_populates="events")
+    incident: Mapped["Incident | None"] = relationship(back_populates="events")
+
+
+class Incident(Base):
+    """A group of failed events that are "the same problem" (see app.signature).
+
+    The readable parts are kept so the UI can show WHY events were grouped. Counters
+    (occurrences, first/last seen) are NOT stored: they are computed by query, so they can
+    never disagree with the events.
+    """
+
+    __tablename__ = "incidents"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    signature: Mapped[str] = mapped_column(String(16), unique=True)
+    signature_version: Mapped[str] = mapped_column(String(10))
+    workflow_id: Mapped[int] = mapped_column(
+        ForeignKey("workflows.id", ondelete="RESTRICT"), index=True
+    )
+    node_name: Mapped[str | None] = mapped_column(String(255))  # NULL = unattributed
+    error_name: Mapped[str | None] = mapped_column(String(255))  # NULL = unknown
+    normalized_message: Mapped[str] = mapped_column(Text)  # redacted and normalized, safe to show
+    status: Mapped[IncidentStatus] = mapped_column(
+        Enum(
+            IncidentStatus,
+            name="incident_status",
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            values_callable=lambda members: [m.value for m in members],
+        ),
+        default=IncidentStatus.OPEN,
+    )
+    created_at: Mapped[datetime] = mapped_column(NaiveUTCDateTime, default=utcnow)
+
+    workflow: Mapped[Workflow] = relationship()
+    events: Mapped[list[ExecutionEvent]] = relationship(back_populates="incident")

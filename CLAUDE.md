@@ -14,6 +14,7 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - Run tests: `python -m pytest`
 - Seed synthetic data (app must be running): `python -m scripts.seed`  (safe to repeat)
 - Pull n8n executions (needs N8N_BASE_URL + N8N_API_KEY in `.env`): `python -m scripts.sync_n8n` (`--loop 300` to repeat)
+- Recompute incident grouping after a signature-rule change: `python -m scripts.rebuild_incidents` (idempotent)
 - Reset the DB (DESTRUCTIVE, deletes all data): `python -m scripts.reset_db --yes`
   (run from the repo root; SQLite only; stop the app first)
 
@@ -133,6 +134,31 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   responses (fake ids/domains; `tests/test_fixtures_clean.py` guards them). Never commit unscrubbed captures.
 - The assistant must NOT run the live sync against the real n8n instance: error text can hold customer data.
   The user runs it and reports counts.
+
+## Incident grouping (V2-M1)
+- `Incident` (`app/models.py`) groups FAILED events with the same signature; `ExecutionEvent.incident_id` is nullable
+  (FK RESTRICT, indexed). Only `failed` events ever get one. `IncidentStatus` has only `open` until V2-M4.
+  Adding the table/column needed a DB reset (then re-register the workflow and re-run the sync).
+- `app/signature.py` (PURE, no DB): `signature = sha256("v1|workflow_id|node or <unattributed>|error_name|normalized_message")[:16]`.
+  `|` and `%` inside a field are escaped. `error_name`/message come from the `error_raw` JSON (`name`, `message`); anything
+  else (free text from the API, no error) uses `error_summary` and has no error name. `normalize_message`: `redact()` ->
+  lowercase + whitespace -> `"x"`->`"<q>"` (single quotes kept), URL->`scheme://host/<path>`, e-mail, UUID, ISO date->`<ts>`,
+  12+ char ids with a digit (or hex)->`<id>`, numbers of 2+ digits->`<n>` except standalone 4xx/5xx codes -> trailing
+  punctuation off -> cap 300 (cap is LAST, never splits a placeholder). `tests/test_signature.py` GOLDEN table is the spec.
+- ANY rule change = bump `SIGNATURE_VERSION` + run `python -m scripts.rebuild_incidents` (and update the golden tests/corpus).
+  Rebuild reassigns all failed events, detaches non-failed ones, and DELETES incidents left with no events (derived data;
+  execution events are never touched).
+- `app/sanitize.py::redact()` is the shared secret scrubber (sanitize_error uses it too).
+- `assign_incident` runs inside `ingest_event` (events.py) in the SAME transaction: ingest commits once at the end and, on an
+  `IntegrityError` (lost race on external_event_id OR on a new incident signature), rolls back and retries once.
+- Counters (`occurrence_count`, `first_seen`, `last_seen`) are NEVER stored; computed by query. "Seen" = `started_at`,
+  else `created_at`.
+- `GET /api/incidents` (`workflow_id`, `status`, `limit` 1..200, `offset`; last_seen DESC, id DESC) and
+  `GET /api/incidents/{id}` (+ 10 newest events). Unauthenticated reads (V1). `EventRead` now has `incident_id`.
+- `tests/corpus/incidents.json` (30 labelled failed events; NEVER loaded into the real DB). Same `group` => one incident,
+  different `group` => never. Loaded by `tests/corpus_helpers.py` through the real sync mapping. n8n-shaped cases must match
+  `tests/fixtures/n8n/F3_error_with_data.json`. Fake secrets in it must start with `FAKE` (guarded in `test_fixtures_clean.py`).
+- No LLM, no API key, no new dependency (V2-M2 builds the context, V2-M3 adds the model).
 
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,

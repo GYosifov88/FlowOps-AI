@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.database import init_db
 from app.logging_config import configure_logging
 from app.middleware import RequestContextMiddleware
-from app.routers import events, pages, workflows
+from app.routers import events, incidents, pages, workflows
 
 settings = get_settings()
 
@@ -31,6 +31,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(RequestContextMiddleware)
 app.include_router(workflows.router)
 app.include_router(events.router)
+app.include_router(incidents.router)
 app.include_router(pages.router)
 
 

@@ -47,3 +47,50 @@ class TestFixture:
                 assert row["workflowId"] == "wf_fixture_001"
             if path.name.startswith("F5"):
                 assert row["id"].startswith("wf_fixture_")
+
+
+# ------------------------------------------------------------------ the incident corpus
+#
+# tests/corpus/incidents.json must be as clean as the fixtures. It is allowed ONE thing the
+# fixtures are not: secret-looking values, because some cases exist to prove they get
+# redacted. Those values must start with FAKE so nobody can mistake them for real ones.
+
+CORPUS = Path(__file__).parent / "corpus" / "incidents.json"
+SECRET_VALUE = re.compile(
+    r"(api[_-]?key|password|secret|token)[\"']?\s*[:=]\s*[\"']?(?!FAKE)\w{8,}", re.I
+)
+BEARER_VALUE = re.compile(r"bearer\s+(?!FAKE)\S{8,}", re.I)
+
+
+def corpus_text() -> str:
+    return CORPUS.read_text(encoding="utf-8")
+
+
+class TestCorpus:
+    def test_is_valid_json(self):
+        json.loads(corpus_text())
+
+    def test_no_emails_outside_example_com(self):
+        for match in EMAIL.finditer(corpus_text()):
+            assert match.group(0).lower().endswith("@example.com"), match.group(0)
+
+    def test_no_urls_outside_example_domains(self):
+        for host in URL.findall(corpus_text()):
+            assert host == "example.com" or host.endswith(".example.com"), host
+
+    def test_no_real_looking_credentials_or_tokens(self):
+        text = corpus_text()
+        assert not BEARER_VALUE.search(text)
+        assert not SECRET_VALUE.search(text)
+
+    def test_fake_secrets_are_clearly_fake(self):
+        # Every secret-shaped value that IS present must say FAKE; prove the guard can see them.
+        assert re.search(r"bearer\s+FAKE-", corpus_text(), re.I)
+        assert re.search(r"api_key=FAKE-", corpus_text())
+
+    def test_only_fake_workflow_ids_and_example_domains(self):
+        data = json.loads(corpus_text())
+        assert {w["external_id"] for w in data["workflows"].values()} <= {"wf_corpus_A", "wf_corpus_B"}
+        for case in data["cases"]:
+            if case["source"] == "n8n":
+                assert case["execution"]["workflowId"].startswith("wf_corpus_")

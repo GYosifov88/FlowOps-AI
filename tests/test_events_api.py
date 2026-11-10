@@ -302,7 +302,7 @@ def test_response_exposes_exactly_the_documented_fields(post, workflow_id):
 
     assert set(event) == {
         "id", "workflow_id", "external_event_id", "status", "started_at", "finished_at",
-        "duration_ms", "node_name", "mode", "error_summary", "created_at",
+        "duration_ms", "node_name", "mode", "error_summary", "incident_id", "created_at",
     }
 
 

@@ -28,13 +28,22 @@ _KEYED_SECRET = re.compile(
 _WHITESPACE = re.compile(r"\s+")
 
 
+def redact(text: str) -> str:
+    """Replace obvious secret VALUES (Authorization / Bearer / keyed secrets) with [REDACTED].
+
+    Same best-effort limits as the module docstring. Shared by sanitize_error and by the
+    incident signature code, so nothing secret reaches either.
+    """
+    text = _AUTHORIZATION.sub(rf"\1{REDACTED}", text)
+    text = _BEARER.sub(rf"\1{REDACTED}", text)
+    return _KEYED_SECRET.sub(rf"\1{REDACTED}", text)
+
+
 def sanitize_error(raw: str | None) -> str | None:
     if raw is None or not raw.strip():
         return None
     # Redact first, so truncation can never leave the front half of a secret behind.
-    text = _AUTHORIZATION.sub(rf"\1{REDACTED}", raw)
-    text = _BEARER.sub(rf"\1{REDACTED}", text)
-    text = _KEYED_SECRET.sub(rf"\1{REDACTED}", text)
+    text = redact(raw)
     text = _WHITESPACE.sub(" ", text).strip()
     if len(text) > MAX_LENGTH:
         text = text[: MAX_LENGTH - len(TRUNCATION_MARKER)] + TRUNCATION_MARKER

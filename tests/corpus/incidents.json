@@ -1,0 +1,1168 @@
+{
+  "corpus_version": 1,
+  "signature_version": "v1",
+  "description": "Failed-event corpus for incident grouping (V2-M1) and, later, the analysis eval (V2-M3). Never loaded into the main database. tier 1 = a real failure, scrubbed; tier 3 = hand-written (tier 2, provoked in a sandbox workflow, may be added before V2-M3). Cases with the same `group` MUST end up in one incident; cases with different groups must NOT.",
+  "workflows": {
+    "A": {
+      "name": "Example Orders Sync",
+      "source": "n8n",
+      "external_id": "wf_corpus_A"
+    },
+    "B": {
+      "name": "Example Invoice Export",
+      "source": "n8n",
+      "external_id": "wf_corpus_B"
+    }
+  },
+  "cases": [
+    {
+      "id": "c01",
+      "tier": 1,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "sheets-credential",
+      "category": "auth_credential",
+      "expected_message": "the credential \"<q>\" needs to be reconnected",
+      "facts_knowable": [
+        "failing node is SHEETS — Load Settings",
+        "error is NodeApiError: credential needs to be reconnected"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910001",
+        "finished": false,
+        "mode": "manual",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-24T06:16:26.875Z",
+        "startedAt": "2026-10-24T06:16:26.875Z",
+        "stoppedAt": "2026-10-24T06:16:27.509Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "Access could not be refreshed because the connected account has revoked access, the refresh token expired, or the account password or permissions changed. Open the credential and reconnect it to continue.",
+              "name": "NodeApiError",
+              "httpCode": null,
+              "message": "The credential \"Example-marketing\" needs to be reconnected.",
+              "stack": "NodeApiError: The credential \"Example-marketing\" needs to be reconnected.\n    at ExecuteContext.apiRequest (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/transport/index.ts:80:9)\n    at GoogleSheet.spreadsheetGetSheet (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/helpers/GoogleSheet.ts:141:21)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "SHEETS — Load Settings"
+              }
+            },
+            "lastNodeExecuted": "SHEETS — Load Settings"
+          }
+        }
+      },
+      "note": "The real failure, scrubbed. Same shape as tests/fixtures/n8n/F3_error_with_data.json."
+    },
+    {
+      "id": "c02",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "sheets-credential",
+      "category": "auth_credential",
+      "expected_message": "the credential \"<q>\" needs to be reconnected",
+      "facts_knowable": [
+        "failing node is SHEETS — Load Settings",
+        "error is NodeApiError: credential needs to be reconnected"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910002",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-25T06:16:21.114Z",
+        "startedAt": "2026-10-25T06:16:21.114Z",
+        "stoppedAt": "2026-10-25T06:16:21.702Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "Access could not be refreshed because the connected account has revoked access, the refresh token expired, or the account password or permissions changed. Open the credential and reconnect it to continue.",
+              "name": "NodeApiError",
+              "httpCode": null,
+              "message": "The credential \"Example-sales\" needs to be reconnected.",
+              "stack": "NodeApiError: The credential \"Example-sales\" needs to be reconnected.\n    at ExecuteContext.apiRequest (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/transport/index.ts:81:9)\n    at GoogleSheet.spreadsheetGetSheet (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/helpers/GoogleSheet.ts:141:21)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "SHEETS — Load Settings"
+              }
+            },
+            "lastNodeExecuted": "SHEETS — Load Settings"
+          }
+        }
+      },
+      "note": "Merges: a different credential name and mode, same node and error."
+    },
+    {
+      "id": "c03",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "sheets-credential",
+      "category": "auth_credential",
+      "expected_message": "the credential \"<q>\" needs to be reconnected",
+      "facts_knowable": [
+        "failing node is SHEETS — Load Settings",
+        "error is NodeApiError: credential needs to be reconnected"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910003",
+        "finished": false,
+        "mode": "webhook",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-26T06:16:30.402Z",
+        "startedAt": "2026-10-26T06:16:30.402Z",
+        "stoppedAt": "2026-10-26T06:16:30.951Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": null,
+              "name": "NodeApiError",
+              "httpCode": 401,
+              "message": "The credential \"Example-marketing\" needs to be reconnected.",
+              "stack": "NodeApiError: The credential \"Example-marketing\" needs to be reconnected.\n    at ExecuteContext.apiRequest (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/transport/index.ts:80:9)\n    at GoogleSheet.spreadsheetGetSheet (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/helpers/GoogleSheet.ts:141:21)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "SHEETS — Load Settings"
+              }
+            },
+            "lastNodeExecuted": "SHEETS — Load Settings"
+          }
+        }
+      },
+      "note": "Merges: httpCode and description are not part of the signature."
+    },
+    {
+      "id": "c04",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "B",
+      "group": "sheets-credential-B",
+      "category": "auth_credential",
+      "expected_message": "the credential \"<q>\" needs to be reconnected",
+      "facts_knowable": [
+        "failing node is SHEETS — Load Settings",
+        "error is NodeApiError: credential needs to be reconnected"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910004",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-26T07:00:00.100Z",
+        "startedAt": "2026-10-26T07:00:00.100Z",
+        "stoppedAt": "2026-10-26T07:00:00.700Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_B",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "Access could not be refreshed because the connected account has revoked access, the refresh token expired, or the account password or permissions changed. Open the credential and reconnect it to continue.",
+              "name": "NodeApiError",
+              "httpCode": null,
+              "message": "The credential \"Example-marketing\" needs to be reconnected.",
+              "stack": "NodeApiError: The credential \"Example-marketing\" needs to be reconnected.\n    at ExecuteContext.apiRequest (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/transport/index.ts:80:9)\n    at GoogleSheet.spreadsheetGetSheet (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/helpers/GoogleSheet.ts:141:21)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "SHEETS — Load Settings"
+              }
+            },
+            "lastNodeExecuted": "SHEETS — Load Settings"
+          }
+        }
+      },
+      "note": "Must NOT merge with c01-c03: the identical error in another workflow is its own incident."
+    },
+    {
+      "id": "c05",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "sheets-id",
+      "category": "configuration",
+      "expected_message": "could not find spreadsheet with id <id>",
+      "facts_knowable": [
+        "failing node is SHEETS — Load Settings",
+        "a spreadsheet was not found (404)"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910005",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-27T08:00:00.000Z",
+        "startedAt": "2026-10-27T08:00:00.000Z",
+        "stoppedAt": "2026-10-27T08:00:00.610Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "The resource you are requesting could not be found",
+              "name": "NodeApiError",
+              "httpCode": 404,
+              "message": "Could not find spreadsheet with ID 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+              "stack": "NodeApiError: Could not find spreadsheet with ID 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms\n    at ExecuteContext.apiRequest (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/transport/index.ts:80:9)\n    at GoogleSheet.spreadsheetGetSheet (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/helpers/GoogleSheet.ts:141:21)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "SHEETS — Load Settings"
+              }
+            },
+            "lastNodeExecuted": "SHEETS — Load Settings"
+          }
+        }
+      },
+      "note": "Must NOT merge with c01-c03: same node, different error."
+    },
+    {
+      "id": "c06",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "sheets-id",
+      "category": "configuration",
+      "expected_message": "could not find spreadsheet with id <id>",
+      "facts_knowable": [
+        "failing node is SHEETS — Load Settings",
+        "a spreadsheet was not found (404)"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910006",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-28T08:00:00.000Z",
+        "startedAt": "2026-10-28T08:00:00.000Z",
+        "stoppedAt": "2026-10-28T08:00:00.590Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "The resource you are requesting could not be found",
+              "name": "NodeApiError",
+              "httpCode": 404,
+              "message": "Could not find spreadsheet with ID 1a2B3c4D5e6F7g8H9i0J1k2L3m4N5o6P7q8R9s0T1u2V",
+              "stack": "NodeApiError: Could not find spreadsheet with ID 1a2B3c4D5e6F7g8H9i0J1k2L3m4N5o6P7q8R9s0T1u2V\n    at ExecuteContext.apiRequest (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/transport/index.ts:80:9)\n    at GoogleSheet.spreadsheetGetSheet (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Sheet/v2/helpers/GoogleSheet.ts:141:21)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "SHEETS — Load Settings"
+              }
+            },
+            "lastNodeExecuted": "SHEETS — Load Settings"
+          }
+        }
+      },
+      "note": "Merges with c05: only the (changing) spreadsheet id differs."
+    },
+    {
+      "id": "c07",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "http-429-body",
+      "category": "rate_limit",
+      "expected_message": "429 - {\"<q>\":\"<q>\",\"<q>\":<n>}",
+      "facts_knowable": [
+        "failing node is HTTP — Fetch Orders",
+        "HTTP status 429"
+      ],
+      "cause_knowable": true,
+      "trap": false,
+      "execution": {
+        "id": "910007",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-28T10:00:00.000Z",
+        "startedAt": "2026-10-28T10:00:00.000Z",
+        "stoppedAt": "2026-10-28T10:00:01.200Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "Too many requests",
+              "name": "NodeApiError",
+              "httpCode": 429,
+              "message": "429 - {\"message\":\"Too many requests\",\"retry_after\":32}",
+              "stack": "NodeApiError: 429 - {\"message\":\"Too many requests\",\"retry_after\":32}\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/HttpRequest/V3/HttpRequestV3.node.ts:2012:19)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "HTTP — Fetch Orders"
+              }
+            },
+            "lastNodeExecuted": "HTTP — Fetch Orders"
+          }
+        }
+      },
+      "note": "Merges with c08: the retry_after value changes, status code 429 is kept."
+    },
+    {
+      "id": "c08",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "http-429-body",
+      "category": "rate_limit",
+      "expected_message": "429 - {\"<q>\":\"<q>\",\"<q>\":<n>}",
+      "facts_knowable": [
+        "failing node is HTTP — Fetch Orders",
+        "HTTP status 429"
+      ],
+      "cause_knowable": true,
+      "trap": false,
+      "execution": {
+        "id": "910008",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-28T11:00:00.000Z",
+        "startedAt": "2026-10-28T11:00:00.000Z",
+        "stoppedAt": "2026-10-28T11:00:01.100Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "Too many requests",
+              "name": "NodeApiError",
+              "httpCode": 429,
+              "message": "429 - {\"message\":\"Too many requests\",\"retry_after\":45}",
+              "stack": "NodeApiError: 429 - {\"message\":\"Too many requests\",\"retry_after\":45}\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/HttpRequest/V3/HttpRequestV3.node.ts:2012:19)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "HTTP — Fetch Orders"
+              }
+            },
+            "lastNodeExecuted": "HTTP — Fetch Orders"
+          }
+        }
+      }
+    },
+    {
+      "id": "c09",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "http-500-axios",
+      "category": "upstream_error",
+      "expected_message": "request failed with status code 500",
+      "facts_knowable": [
+        "failing node is HTTP — Fetch Orders",
+        "HTTP status 500"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910009",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-29T10:00:00.000Z",
+        "startedAt": "2026-10-29T10:00:00.000Z",
+        "stoppedAt": "2026-10-29T10:00:02.000Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": null,
+              "name": "NodeApiError",
+              "httpCode": 500,
+              "message": "Request failed with status code 500",
+              "stack": "NodeApiError: Request failed with status code 500\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/HttpRequest/V3/HttpRequestV3.node.ts:2012:19)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "HTTP — Fetch Orders"
+              }
+            },
+            "lastNodeExecuted": "HTTP — Fetch Orders"
+          }
+        }
+      },
+      "note": "Must NOT merge with c10: 500 and 429 are different problems (4xx/5xx codes are kept)."
+    },
+    {
+      "id": "c10",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "http-429-axios",
+      "category": "rate_limit",
+      "expected_message": "request failed with status code 429",
+      "facts_knowable": [
+        "failing node is HTTP — Fetch Orders",
+        "HTTP status 429"
+      ],
+      "cause_knowable": true,
+      "trap": false,
+      "execution": {
+        "id": "910010",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-29T12:00:00.000Z",
+        "startedAt": "2026-10-29T12:00:00.000Z",
+        "stoppedAt": "2026-10-29T12:00:02.000Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": null,
+              "name": "NodeApiError",
+              "httpCode": 429,
+              "message": "Request failed with status code 429",
+              "stack": "NodeApiError: Request failed with status code 429\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/HttpRequest/V3/HttpRequestV3.node.ts:2012:19)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "HTTP — Fetch Orders"
+              }
+            },
+            "lastNodeExecuted": "HTTP — Fetch Orders"
+          }
+        }
+      }
+    },
+    {
+      "id": "c11",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "timeout-post-invoice",
+      "category": "timeout",
+      "expected_message": "timeout of <n>ms exceeded",
+      "facts_knowable": [
+        "failing node is HTTP — Post Invoice",
+        "a request timed out"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910011",
+        "finished": false,
+        "mode": "webhook",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-29T13:00:00.000Z",
+        "startedAt": "2026-10-29T13:00:00.000Z",
+        "stoppedAt": "2026-10-29T13:00:30.050Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": null,
+              "name": "NodeApiError",
+              "httpCode": null,
+              "message": "timeout of 30000ms exceeded",
+              "stack": "NodeApiError: timeout of 30000ms exceeded\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/HttpRequest/V3/HttpRequestV3.node.ts:2012:19)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "HTTP — Post Invoice"
+              }
+            },
+            "lastNodeExecuted": "HTTP — Post Invoice"
+          }
+        }
+      }
+    },
+    {
+      "id": "c12",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "timeout-post-invoice",
+      "category": "timeout",
+      "expected_message": "timeout of <n>ms exceeded",
+      "facts_knowable": [
+        "failing node is HTTP — Post Invoice",
+        "a request timed out"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910012",
+        "finished": false,
+        "mode": "webhook",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-29T14:00:00.000Z",
+        "startedAt": "2026-10-29T14:00:00.000Z",
+        "stoppedAt": "2026-10-29T14:01:00.050Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": null,
+              "name": "NodeApiError",
+              "httpCode": null,
+              "message": "timeout of 60000ms exceeded",
+              "stack": "NodeApiError: timeout of 60000ms exceeded\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/HttpRequest/V3/HttpRequestV3.node.ts:2012:19)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "HTTP — Post Invoice"
+              }
+            },
+            "lastNodeExecuted": "HTTP — Post Invoice"
+          }
+        }
+      },
+      "note": "Merges with c11: the configured timeout value is a number that changes."
+    },
+    {
+      "id": "c13",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "timeout-fetch-orders",
+      "category": "timeout",
+      "expected_message": "timeout of <n>ms exceeded",
+      "facts_knowable": [
+        "failing node is HTTP — Fetch Orders",
+        "a request timed out"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910013",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-30T09:00:00.000Z",
+        "startedAt": "2026-10-30T09:00:00.000Z",
+        "stoppedAt": "2026-10-30T09:00:30.040Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": null,
+              "name": "NodeApiError",
+              "httpCode": null,
+              "message": "timeout of 30000ms exceeded",
+              "stack": "NodeApiError: timeout of 30000ms exceeded\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/HttpRequest/V3/HttpRequestV3.node.ts:2012:19)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1456:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "HTTP — Fetch Orders"
+              }
+            },
+            "lastNodeExecuted": "HTTP — Fetch Orders"
+          }
+        }
+      },
+      "note": "Must NOT merge with c11/c12: the same message at another node."
+    },
+    {
+      "id": "c14",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "js-undefined-email",
+      "category": "data_schema",
+      "expected_message": "cannot read properties of undefined (reading 'email') [line 4]",
+      "facts_knowable": [
+        "failing node is Code — Map Customers",
+        "TypeError reading field 'email' of undefined"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910014",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-30T11:00:00.000Z",
+        "startedAt": "2026-10-30T11:00:00.000Z",
+        "stoppedAt": "2026-10-30T11:00:00.300Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "TypeError",
+              "name": "ExecutionError",
+              "httpCode": null,
+              "message": "Cannot read properties of undefined (reading 'email') [line 4]",
+              "stack": "ExecutionError: Cannot read properties of undefined (reading 'email') [line 4]\n    at JsTaskRunnerSandbox.runCodeAllItems (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Code/Code.node.ts:152:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "Code — Map Customers"
+              }
+            },
+            "lastNodeExecuted": "Code — Map Customers"
+          }
+        }
+      }
+    },
+    {
+      "id": "c15",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "js-undefined-name",
+      "category": "data_schema",
+      "expected_message": "cannot read properties of undefined (reading 'name') [line 4]",
+      "facts_knowable": [
+        "failing node is Code — Map Customers",
+        "TypeError reading field 'name' of undefined"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910015",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-30T12:00:00.000Z",
+        "startedAt": "2026-10-30T12:00:00.000Z",
+        "stoppedAt": "2026-10-30T12:00:00.310Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "TypeError",
+              "name": "ExecutionError",
+              "httpCode": null,
+              "message": "Cannot read properties of undefined (reading 'name') [line 4]",
+              "stack": "ExecutionError: Cannot read properties of undefined (reading 'name') [line 4]\n    at JsTaskRunnerSandbox.runCodeAllItems (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Code/Code.node.ts:152:11)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "Code — Map Customers"
+              }
+            },
+            "lastNodeExecuted": "Code — Map Customers"
+          }
+        }
+      },
+      "note": "Must NOT merge with c14: which field is undefined matters, so single quotes are kept."
+    },
+    {
+      "id": "c16",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "folder-param",
+      "category": "configuration",
+      "expected_message": "the 'folder' parameter is required",
+      "facts_knowable": [
+        "failing node is Google Drive — Upload Report",
+        "a required parameter is not set"
+      ],
+      "cause_knowable": true,
+      "trap": false,
+      "execution": {
+        "id": "910016",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-30T13:00:00.000Z",
+        "startedAt": "2026-10-30T13:00:00.000Z",
+        "stoppedAt": "2026-10-30T13:00:00.150Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": "Set the folder in the node's settings",
+              "name": "NodeOperationError",
+              "httpCode": null,
+              "message": "The 'Folder' parameter is required",
+              "stack": "NodeOperationError: The 'Folder' parameter is required\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/n8n-nodes-base/nodes/Google/Drive/v3/GoogleDriveV3.node.ts:140:13)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)",
+              "node": {
+                "name": "Google Drive — Upload Report"
+              }
+            },
+            "lastNodeExecuted": "Google Drive — Upload Report"
+          }
+        }
+      }
+    },
+    {
+      "id": "c17",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "crashed-A",
+      "category": "infrastructure_crash",
+      "expected_message": "n8n: crashed (error details unavailable)",
+      "facts_knowable": [
+        "the execution crashed",
+        "no node and no message are known"
+      ],
+      "cause_knowable": false,
+      "trap": true,
+      "execution": {
+        "id": "910017",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "crashed",
+        "createdAt": "2026-10-31T01:00:00.000Z",
+        "startedAt": "2026-10-31T01:00:00.000Z",
+        "stoppedAt": "2026-10-31T01:02:10.000Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db"
+      },
+      "note": "TRAP: nothing is known about the cause; the only correct analysis is 'insufficient evidence'."
+    },
+    {
+      "id": "c18",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "crashed-A",
+      "category": "infrastructure_crash",
+      "expected_message": "n8n: crashed (error details unavailable)",
+      "facts_knowable": [
+        "the execution crashed",
+        "no node and no message are known"
+      ],
+      "cause_knowable": false,
+      "trap": true,
+      "execution": {
+        "id": "910018",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "crashed",
+        "createdAt": "2026-10-31T02:00:00.000Z",
+        "startedAt": "2026-10-31T02:00:00.000Z",
+        "stoppedAt": "2026-10-31T02:03:00.000Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "lastNodeExecuted": "HTTP — Fetch Orders"
+          }
+        }
+      },
+      "note": "Merges with c17. lastNodeExecuted is present but must never become the failing node."
+    },
+    {
+      "id": "c19",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "B",
+      "group": "crashed-B",
+      "category": "infrastructure_crash",
+      "expected_message": "n8n: crashed (error details unavailable)",
+      "facts_knowable": [
+        "the execution crashed",
+        "no node and no message are known"
+      ],
+      "cause_knowable": false,
+      "trap": true,
+      "execution": {
+        "id": "910019",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "crashed",
+        "createdAt": "2026-10-31T03:00:00.000Z",
+        "startedAt": "2026-10-31T03:00:00.000Z",
+        "stoppedAt": "2026-10-31T03:01:00.000Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_B",
+        "waitTill": null,
+        "storedAt": "db"
+      },
+      "note": "Must NOT merge with c17/c18: another workflow."
+    },
+    {
+      "id": "c20",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "redacted-A",
+      "category": "unknown",
+      "expected_message": "n8n: error details unavailable (redacted)",
+      "facts_knowable": [
+        "an execution failed",
+        "n8n redacted the execution data"
+      ],
+      "cause_knowable": false,
+      "trap": true,
+      "execution": {
+        "id": "910020",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-31T04:00:00.000Z",
+        "startedAt": "2026-10-31T04:00:00.000Z",
+        "stoppedAt": "2026-10-31T04:00:05.000Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {},
+          "redactionInfo": {
+            "isRedacted": true
+          }
+        }
+      },
+      "note": "TRAP. By the signature formula 'redacted' and 'data too large' are different incidents."
+    },
+    {
+      "id": "c21",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "too-large-A",
+      "category": "unknown",
+      "expected_message": "n8n: error details unavailable (data too large)",
+      "facts_knowable": [
+        "an execution failed",
+        "its data was too large to read"
+      ],
+      "cause_knowable": false,
+      "trap": true,
+      "execution": {
+        "id": "910021",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-31T05:00:00.000Z",
+        "startedAt": "2026-10-31T05:00:00.000Z",
+        "stoppedAt": "2026-10-31T05:00:09.000Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "dataTooLargeToDisplay": true
+      },
+      "note": "TRAP."
+    },
+    {
+      "id": "c22",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "workflow-timeout",
+      "category": "timeout",
+      "expected_message": "workflow execution timed out after <n> seconds",
+      "facts_knowable": [
+        "the whole execution timed out",
+        "n8n names no failing node"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910022",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-31T06:00:00.000Z",
+        "startedAt": "2026-10-31T06:00:00.000Z",
+        "stoppedAt": "2026-10-31T07:00:00.000Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": null,
+              "name": "TimeoutExecutionCancelledError",
+              "httpCode": null,
+              "message": "Workflow execution timed out after 3600 seconds",
+              "stack": "TimeoutExecutionCancelledError: Workflow execution timed out after 3600 seconds\n    at WorkflowExecute.processRunExecutionData (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1790:5)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)"
+            },
+            "lastNodeExecuted": "HTTP — Post Invoice"
+          }
+        }
+      },
+      "note": "Unattributed. lastNodeExecuted (HTTP — Post Invoice) is present and must be ignored."
+    },
+    {
+      "id": "c23",
+      "tier": 3,
+      "source": "n8n",
+      "workflow": "A",
+      "group": "workflow-timeout",
+      "category": "timeout",
+      "expected_message": "workflow execution timed out after <n> seconds",
+      "facts_knowable": [
+        "the whole execution timed out",
+        "n8n names no failing node"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "execution": {
+        "id": "910023",
+        "finished": false,
+        "mode": "trigger",
+        "retryOf": null,
+        "retrySuccessId": null,
+        "status": "error",
+        "createdAt": "2026-10-31T08:00:00.000Z",
+        "startedAt": "2026-10-31T08:00:00.000Z",
+        "stoppedAt": "2026-10-31T10:00:00.000Z",
+        "deletedAt": null,
+        "workflowId": "wf_corpus_A",
+        "waitTill": null,
+        "storedAt": "db",
+        "data": {
+          "resultData": {
+            "error": {
+              "description": null,
+              "name": "TimeoutExecutionCancelledError",
+              "httpCode": null,
+              "message": "Workflow execution timed out after 7200 seconds",
+              "stack": "TimeoutExecutionCancelledError: Workflow execution timed out after 7200 seconds\n    at WorkflowExecute.processRunExecutionData (/usr/local/lib/node_modules/n8n/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1790:5)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)"
+            },
+            "lastNodeExecuted": "HTTP — Fetch Orders"
+          }
+        }
+      },
+      "note": "Merges with c22: the timeout length is a number that changes."
+    },
+    {
+      "id": "c24",
+      "tier": 3,
+      "source": "api",
+      "workflow": "A",
+      "group": "pg-refused",
+      "category": "upstream_error",
+      "expected_message": "error: connect econnrefused db.example.com:<n>",
+      "facts_knowable": [
+        "failing node is Postgres — Write Orders",
+        "connection refused"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "event": {
+        "external_event_id": "corpus:c24",
+        "node_name": "Postgres — Write Orders",
+        "mode": "trigger",
+        "started_at": "2026-11-01T01:00:00Z",
+        "finished_at": "2026-11-01T01:00:02Z",
+        "error_raw": "Error: connect ECONNREFUSED db.example.com:5432"
+      }
+    },
+    {
+      "id": "c25",
+      "tier": 3,
+      "source": "api",
+      "workflow": "A",
+      "group": "pg-refused",
+      "category": "upstream_error",
+      "expected_message": "error: connect econnrefused db.example.com:<n>",
+      "facts_knowable": [
+        "failing node is Postgres — Write Orders",
+        "connection refused"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "event": {
+        "external_event_id": "corpus:c25",
+        "node_name": "Postgres — Write Orders",
+        "mode": "trigger",
+        "started_at": "2026-11-01T02:00:00Z",
+        "finished_at": "2026-11-01T02:00:02Z",
+        "error_raw": "Error: connect ECONNREFUSED db.example.com:5433"
+      },
+      "note": "Merges with c24: the port is a number."
+    },
+    {
+      "id": "c26",
+      "tier": 3,
+      "source": "api",
+      "workflow": "A",
+      "group": "bearer-rejected",
+      "category": "auth_credential",
+      "expected_message": "upstream rejected the request (401). authorization: [redacted] is invalid",
+      "facts_knowable": [
+        "failing node is HTTP — Fetch Orders",
+        "upstream answered 401"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "event": {
+        "external_event_id": "corpus:c26",
+        "node_name": "HTTP — Fetch Orders",
+        "mode": "trigger",
+        "started_at": "2026-11-01T03:00:00Z",
+        "finished_at": "2026-11-01T03:00:01Z",
+        "error_raw": "Upstream rejected the request (401). Authorization: Bearer FAKE-TOKEN-ABCDEF123456 is invalid"
+      },
+      "note": "Contains a FAKE secret on purpose: it must never reach the stored readable parts."
+    },
+    {
+      "id": "c27",
+      "tier": 3,
+      "source": "api",
+      "workflow": "A",
+      "group": "bearer-rejected",
+      "category": "auth_credential",
+      "expected_message": "upstream rejected the request (401). authorization: [redacted] is invalid",
+      "facts_knowable": [
+        "failing node is HTTP — Fetch Orders",
+        "upstream answered 401"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "event": {
+        "external_event_id": "corpus:c27",
+        "node_name": "HTTP — Fetch Orders",
+        "mode": "trigger",
+        "started_at": "2026-11-01T04:00:00Z",
+        "finished_at": "2026-11-01T04:00:01Z",
+        "error_raw": "Upstream rejected the request (401). Authorization: Bearer FAKE-TOKEN-ZZZZZZ999999 is invalid"
+      },
+      "note": "Merges with c26: a different secret value is still the same problem."
+    },
+    {
+      "id": "c28",
+      "tier": 3,
+      "source": "api",
+      "workflow": "A",
+      "group": "upstream-503",
+      "category": "upstream_error",
+      "expected_message": "upstream returned 503 for https://api.example.com/<path>",
+      "facts_knowable": [
+        "failing node is HTTP — Fetch Orders",
+        "upstream answered 503"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "event": {
+        "external_event_id": "corpus:c28",
+        "node_name": "HTTP — Fetch Orders",
+        "mode": "trigger",
+        "started_at": "2026-11-01T05:00:00Z",
+        "finished_at": "2026-11-01T05:00:01Z",
+        "error_raw": "Upstream returned 503 for https://api.example.com/v2/orders/8841?page=3&api_key=FAKE-KEY-0123456789"
+      }
+    },
+    {
+      "id": "c29",
+      "tier": 3,
+      "source": "api",
+      "workflow": "A",
+      "group": "upstream-503",
+      "category": "upstream_error",
+      "expected_message": "upstream returned 503 for https://api.example.com/<path>",
+      "facts_knowable": [
+        "failing node is HTTP — Fetch Orders",
+        "upstream answered 503"
+      ],
+      "cause_knowable": false,
+      "trap": false,
+      "event": {
+        "external_event_id": "corpus:c29",
+        "node_name": "HTTP — Fetch Orders",
+        "mode": "trigger",
+        "started_at": "2026-11-01T06:00:00Z",
+        "finished_at": "2026-11-01T06:00:01Z",
+        "error_raw": "Upstream returned 503 for https://api.example.com/v2/orders/9917?page=7&api_key=FAKE-KEY-9876543210"
+      },
+      "note": "Merges with c28: path ids, query values and key are all run-specific."
+    },
+    {
+      "id": "c30",
+      "tier": 3,
+      "source": "api",
+      "workflow": "A",
+      "group": "generic-unknown",
+      "category": "unknown",
+      "expected_message": "something went wrong",
+      "facts_knowable": [
+        "an execution failed"
+      ],
+      "cause_knowable": false,
+      "trap": true,
+      "event": {
+        "external_event_id": "corpus:c30",
+        "node_name": null,
+        "mode": null,
+        "started_at": "2026-11-01T07:00:00Z",
+        "finished_at": null,
+        "error_raw": "Something went wrong"
+      },
+      "note": "TRAP: no node, no detail. Unattributed."
+    }
+  ]
+}

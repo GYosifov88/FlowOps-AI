@@ -8,6 +8,10 @@
     TERMINAL        any          leave alone (warn if status differs)     unchanged
 
 An event without an external_event_id has nothing to dedup on and is always inserted.
+
+Incidents (V2-M1): an event that is stored as `failed`, or becomes `failed` through the
+update above, is attached to its incident (get-or-create by signature) in the SAME
+transaction. The commit happens once, at the end of ingest_event.
 """
 import logging
 from dataclasses import dataclass
@@ -20,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.models import NON_TERMINAL, TERMINAL, ExecutionEvent, ExecutionStatus, Workflow
 from app.sanitize import sanitize_error
+from app.services.incidents import assign_incident
 from app.schemas import EventCreate
 from app.timeutil import compute_duration_ms, to_naive_utc
 
@@ -51,17 +56,26 @@ def ingest_event(
     if db.get(Workflow, data.workflow_id) is None:  # inactive workflows are accepted
         raise WorkflowNotFound
 
-    existing = _find(db, data.external_event_id)
-    if existing is None:
+    for attempt in (1, 2):
         try:
-            return IngestResult("created", _insert(db, data, summary_source))
-        except IntegrityError:
-            # Lost a race against a concurrent insert of the same external_event_id.
-            db.rollback()
             existing = _find(db, data.external_event_id)
             if existing is None:
+                result = IngestResult("created", _insert(db, data, summary_source))
+            else:
+                result = _apply_to_existing(db, existing, data, summary_source)
+            db.commit()
+        except IntegrityError:
+            # Lost a race against a concurrent request: the same external_event_id, or the
+            # same new incident signature, was inserted first. Nothing of ours was saved
+            # (event and incident share one transaction), so start over; the second pass
+            # finds what the winner stored.
+            db.rollback()
+            if attempt == 2:
                 raise
-    return _apply_to_existing(db, existing, data, summary_source)
+            continue
+        db.refresh(result.event)
+        return result
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 def _find(db: Session, external_event_id: str | None) -> ExecutionEvent | None:
@@ -94,8 +108,7 @@ def _insert(
         error_raw=data.error_raw,  # stored exactly as received
     )
     db.add(event)
-    db.commit()
-    db.refresh(event)
+    assign_incident(db, event)
     return event
 
 
@@ -136,8 +149,7 @@ def _apply_to_existing(
         event.node_name = data.node_name
     if event.mode is None:
         event.mode = data.mode
-    db.commit()
-    db.refresh(event)
+    assign_incident(db, event)
     return IngestResult("updated", event)
 
 

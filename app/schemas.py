@@ -12,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.models import ExecutionStatus
+from app.models import ExecutionStatus, IncidentStatus
 
 
 class WorkflowCreate(BaseModel):
@@ -97,6 +97,7 @@ class EventRead(BaseModel):
     node_name: str | None
     mode: str | None
     error_summary: str | None
+    incident_id: int | None  # set only for failed events (V2-M1)
     created_at: datetime
 
     @field_validator("started_at", "finished_at", "created_at")
@@ -113,5 +114,38 @@ class EventIngestResponse(BaseModel):
 class EventPage(BaseModel):
     items: list[EventRead]
     total: int = Field(description="Number of events matching the filters, ignoring paging")
+    limit: int
+    offset: int
+
+
+class IncidentRead(BaseModel):
+    """An incident plus counters computed by query (they are never stored)."""
+
+    id: int
+    signature: str
+    signature_version: str
+    workflow_id: int
+    node_name: str | None = Field(description="Null = unattributed (n8n named no failing node)")
+    error_name: str | None
+    normalized_message: str = Field(description="Redacted and normalized; why events were grouped")
+    status: IncidentStatus
+    occurrence_count: int
+    first_seen: datetime = Field(description="Earliest started_at (created_at if no start time)")
+    last_seen: datetime = Field(description="Latest started_at (created_at if no start time)")
+    created_at: datetime
+
+    @field_validator("first_seen", "last_seen", "created_at")
+    @classmethod
+    def mark_as_utc(cls, value: datetime) -> datetime:
+        return value.replace(tzinfo=timezone.utc)
+
+
+class IncidentDetail(IncidentRead):
+    recent_events: list[EventRead] = Field(description="Up to 10 newest events, newest first")
+
+
+class IncidentPage(BaseModel):
+    items: list[IncidentRead]
+    total: int = Field(description="Number of incidents matching the filters, ignoring paging")
     limit: int
     offset: int
