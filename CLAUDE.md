@@ -40,7 +40,9 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - `Workflow` has UNIQUE (`source`, `external_id`) (M8; NULL external_ids never collide). A duplicate on
   POST/PATCH `/api/workflows` is a 409 (`DuplicateWorkflow`). Adding it needed a DB reset.
 - `error_raw` is stored as received and NEVER rendered or returned; only the sanitized
-  `error_summary` may be shown.
+  `error_summary` may be shown. ONE exception (V2-M2): `app/services/incident_context.py::error_projection` may expose
+  an allow-listed, scrubbed projection of it (message, description, httpCode, <=15 stack lines) inside the incident
+  context/preview only. The string itself, and every other key in it, still never leaves.
 - SQLite pragmas (WAL, busy_timeout=5000, foreign_keys=ON) are set by a connect listener
   in `app/database.py`, registered per engine, SQLite only. WAL creates `*.db-wal` / `*.db-shm`.
 - Startup (`lifespan` in `app/main.py`) runs `init_db()` after the token check: creates MISSING tables only.
@@ -159,6 +161,24 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   different `group` => never. Loaded by `tests/corpus_helpers.py` through the real sync mapping. n8n-shaped cases must match
   `tests/fixtures/n8n/F3_error_with_data.json`. Fake secrets in it must start with `FAKE` (guarded in `test_fixtures_clean.py`).
 - No LLM, no API key, no new dependency (V2-M2 builds the context, V2-M3 adds the model).
+
+## Incident context (V2-M2)
+- `app/services/incident_context.py::build_context(db, incident_id)` = EXACTLY what V2-M3 will send to the model.
+  `GET /api/incidents/{id}/context` previews it: `{context_version, context_hash, context}` (404 unknown id). M3 must call
+  the same function and store the same hash. No LLM, no key, no new dependency, no schema change.
+- Two sections: `trusted` (computed by FlowOps: ids, enums, counts, ISO-Z times; NO free text, `mode` is limited to n8n's
+  known modes else `"other"`) and `untrusted` (workflow name/source, node, error name, normalized message, and the `error`
+  projection from the LATEST occurrence; every string = `scrub` = `redact()` + `scrub_pii()`, capped). Third-party text goes
+  ONLY in `untrusted`; keep it that way when adding fields. The tests pin the exact key sets: adding a field is a deliberate edit.
+- Facts: last success before the first failure, successes after the last failure (count + first), and the window
+  [first_seen, last_seen]: workflow successes, ALL workflow failures, this incident's failures. Only status `success` counts.
+- `app/sanitize.py::scrub_pii`: e-mail, URL userinfo + query string, card/IBAN/9+ digit runs, phone numbers; ISO timestamps,
+  line numbers and short ids are left alone. Best-effort: personal NAMES and street addresses are NOT caught; minimisation
+  (allow-list, no run data) is the real control.
+- Determinism: no clock/randomness; same events -> same context and `context_hash` (sha256 of the canonical JSON).
+- `frame_context(ctx)` wraps the canonical JSON in `<untrusted_incident_data>...</untrusted_incident_data>` with `<`, `>`, `&`
+  written as `\uXXXX`, so error text can never close or open the tag. V2-M3's system prompt must state that the block is
+  untrusted data and the output schema must give the model no action to take.
 
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,

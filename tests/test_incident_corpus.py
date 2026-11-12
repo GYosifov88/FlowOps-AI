@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 import app.signature as signature
 from app.models import ExecutionEvent, Incident
+from app.services.incident_context import FRAME_TAG, build_context, canonical_json, frame_context
 from app.services.incidents import list_incidents
 from tests.corpus_helpers import ingest_corpus, load_corpus
 from tests.n8n_helpers import load
@@ -202,8 +203,61 @@ def test_fake_secrets_do_not_reach_the_api(client, db_session, loaded):
     bodies = [client.get("/api/incidents?limit=200").text]
     ids = [i.id for i in db_session.scalars(select(Incident))]
     bodies += [client.get(f"/api/incidents/{i}").text for i in ids]
+    bodies += [client.get(f"/api/incidents/{i}/context").text for i in ids]
     bodies.append(client.get("/api/events?limit=200").text)
     for body in bodies:
         for secret in FAKE_SECRETS:
             assert secret not in body
         assert "error_raw" not in body
+
+
+# ------------------------------------------------------------------ the context (V2-M2)
+
+
+def has_real_error_detail(case) -> bool:
+    """n8n cases whose execution carried an error object; API free text never has a projection."""
+    if case["source"] != "n8n":
+        return False
+    error = case["execution"].get("data", {}).get("resultData", {}).get("error")
+    return bool(error)
+
+
+def test_every_corpus_context_is_clean_and_complete(loaded, db_session):
+    _, _, incident_of = loaded
+    seen = set()
+    for case in CASES:
+        incident_id = incident_of[case["id"]]
+        if incident_id in seen:
+            continue
+        seen.add(incident_id)
+        context = build_context(db_session, incident_id)
+        blob = canonical_json(context)
+
+        for secret in FAKE_SECRETS:
+            assert secret not in blob, case["id"]
+        assert "@" not in blob, case["id"]               # no e-mail (or user@host) survived
+        assert "error_raw" not in blob and "extra_field" not in blob
+        assert len(blob) < 8000, (case["id"], len(blob))
+        assert context["trusted"]["error_detail_available"] is has_real_error_detail(case), case["id"]
+        assert (context["untrusted"]["error"] is not None) is has_real_error_detail(case), case["id"]
+        assert context["trusted"]["occurrences"]["count"] >= 1
+
+        framed = frame_context(context)
+        assert framed.count("<") == 2 and framed.count(">") == 2
+        inner = framed.removeprefix(f"<{FRAME_TAG}>\n").removesuffix(f"\n</{FRAME_TAG}>")
+        assert json.loads(inner) == context
+    assert len(seen) == len({c["group"] for c in CASES})
+
+
+def test_the_real_credential_incident_context_reads_as_expected(loaded, db_session):
+    _, _, incident_of = loaded
+    context = build_context(db_session, incident_of["c01"])
+    untrusted = context["untrusted"]
+    assert untrusted["node_name"] == "SHEETS — Load Settings"
+    assert untrusted["error_name"] == "NodeApiError"
+    assert untrusted["error"]["message"].startswith('The credential "Example-marketing"')
+    # The LATEST occurrence is c03 (26 Oct): no description, httpCode 401 -- not c01's.
+    assert untrusted["error"]["description"] is None and untrusted["error"]["http_code"] == "401"
+    assert untrusted["error"]["stack"][0].startswith("NodeApiError:")
+    assert context["trusted"]["occurrences"]["count"] == 3
+    assert context["trusted"]["facts"]["last_success_before_first_failure"] is None  # the corpus holds failures only

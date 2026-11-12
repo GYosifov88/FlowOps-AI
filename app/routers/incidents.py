@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import IncidentStatus
-from app.schemas import IncidentDetail, IncidentPage, IncidentRead
+from app.schemas import IncidentContextResponse, IncidentDetail, IncidentPage, IncidentRead
+from app.services import incident_context
 from app.services import incidents as service
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -54,3 +55,23 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
     except service.IncidentNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
     return {**_read(summary), "recent_events": recent}
+
+
+@router.get("/{incident_id}/context", response_model=IncidentContextResponse)
+def get_incident_context(incident_id: int, db: Session = Depends(get_db)):
+    """Preview of the context the analysis will use: exactly what would be sent, nothing more.
+
+    `trusted` is computed by FlowOps; `untrusted` holds third-party text (error messages,
+    names) after secret redaction and PII scrubbing, and must be treated as data, never as
+    instructions. No LLM is called. `error_raw` is never returned; `untrusted.error` is an
+    allow-listed projection of it.
+    """
+    try:
+        context = incident_context.build_context(db, incident_id)
+    except service.IncidentNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
+    return {
+        "context_version": context["context_version"],
+        "context_hash": incident_context.context_hash(context),
+        "context": context,
+    }

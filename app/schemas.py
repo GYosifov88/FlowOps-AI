@@ -1,7 +1,7 @@
 """Pydantic schemas for the API. Input and output are separate on purpose: the API never
 returns a raw ORM object."""
 from datetime import datetime, timezone
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -149,3 +149,13 @@ class IncidentPage(BaseModel):
     total: int = Field(description="Number of incidents matching the filters, ignoring paging")
     limit: int
     offset: int
+
+
+class IncidentContextResponse(BaseModel):
+    """Exactly what V2-M3 will send to the model, so it can be read first."""
+
+    context_version: int
+    context_hash: str = Field(description="sha256 of the canonical JSON of `context`")
+    context: dict[str, Any] = Field(
+        description="`trusted` = computed by FlowOps (no free text); `untrusted` = scrubbed third-party text"
+    )

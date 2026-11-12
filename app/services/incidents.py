@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 RECENT_EVENTS = 10
 
 _seen_at = func.coalesce(ExecutionEvent.started_at, ExecutionEvent.created_at)
+seen_at = _seen_at  # public: other services (incident_context) must use the same definition
 
 
 class IncidentNotFound(Exception):
