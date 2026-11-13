@@ -45,6 +45,16 @@ class IncidentStatus(enum.StrEnum):
     OPEN = "open"
 
 
+class AnalysisStatus(enum.StrEnum):
+    """Outcome of one analysis attempt. Only OK rows carry an analysis."""
+
+    OK = "ok"
+    REFUSED = "refused"
+    INCOMPLETE = "incomplete"  # ran out of output tokens, or was cut off
+    INVALID = "invalid"  # no usable structured output came back
+    ERROR = "error"  # network / auth / API error
+
+
 class Workflow(Base):
     __tablename__ = "workflows"
     # One FlowOps workflow per (source system, id in that system). NULL external_ids never
@@ -141,3 +151,45 @@ class Incident(Base):
 
     workflow: Mapped[Workflow] = relationship()
     events: Mapped[list[ExecutionEvent]] = relationship(back_populates="incident")
+
+
+class IncidentAnalysis(Base):
+    """One analysis attempt for an incident (V2-M3). Rows are NEVER updated or deleted: a new
+    attempt is a new row, so the history of what was asked and answered stays intact."""
+
+    __tablename__ = "incident_analyses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    incident_id: Mapped[int] = mapped_column(
+        ForeignKey("incidents.id", ondelete="RESTRICT"), index=True
+    )
+    # sha256 of the exact context that was sent (app.services.incident_context.context_hash)
+    context_hash: Mapped[str] = mapped_column(String(64))
+    context_version: Mapped[int]
+    prompt_version: Mapped[str] = mapped_column(String(20))
+    provider: Mapped[str] = mapped_column(String(20))
+    model: Mapped[str] = mapped_column(String(100))
+    status: Mapped[AnalysisStatus] = mapped_column(
+        Enum(
+            AnalysisStatus,
+            name="analysis_status",
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            values_callable=lambda members: [m.value for m in members],
+        )
+    )
+    # The verified analysis (JSON) -- only for status "ok". Never the raw model output.
+    analysis_json: Mapped[str | None] = mapped_column(Text)
+    validation_notes_json: Mapped[str | None] = mapped_column(Text)
+    # Scrubbed and capped; only for status "refused".
+    refusal: Mapped[str | None] = mapped_column(Text)
+    # Exception class name (+ HTTP status) or the incomplete reason; never a message or body.
+    error_type: Mapped[str | None] = mapped_column(String(100))
+    input_tokens: Mapped[int | None]
+    output_tokens: Mapped[int | None]
+    reasoning_tokens: Mapped[int | None]
+    forced: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(NaiveUTCDateTime, default=utcnow)
+
+    incident: Mapped[Incident] = relationship()

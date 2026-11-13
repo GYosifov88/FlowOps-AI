@@ -15,6 +15,8 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - Seed synthetic data (app must be running): `python -m scripts.seed`  (safe to repeat)
 - Pull n8n executions (needs N8N_BASE_URL + N8N_API_KEY in `.env`): `python -m scripts.sync_n8n` (`--loop 300` to repeat)
 - Recompute incident grouping after a signature-rule change: `python -m scripts.rebuild_incidents` (idempotent)
+- Quote the cost of the analysis eval (sends NOTHING): `python -m scripts.eval_analysis`. `--yes` really calls OpenAI with the
+  key in `.env` and SPENDS MONEY: only the user runs it (the assistant must never pass `--yes`, see V2-M3).
 - Reset the DB (DESTRUCTIVE, deletes all data): `python -m scripts.reset_db --yes`
   (run from the repo root; SQLite only; stop the app first)
 
@@ -160,7 +162,7 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - `tests/corpus/incidents.json` (30 labelled failed events; NEVER loaded into the real DB). Same `group` => one incident,
   different `group` => never. Loaded by `tests/corpus_helpers.py` through the real sync mapping. n8n-shaped cases must match
   `tests/fixtures/n8n/F3_error_with_data.json`. Fake secrets in it must start with `FAKE` (guarded in `test_fixtures_clean.py`).
-- No LLM, no API key, no new dependency (V2-M2 builds the context, V2-M3 adds the model).
+- No LLM, no API key, no new dependency in V2-M1/M2 (V2-M3 adds the model, see below).
 
 ## Incident context (V2-M2)
 - `app/services/incident_context.py::build_context(db, incident_id)` = EXACTLY what V2-M3 will send to the model.
@@ -180,9 +182,42 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   written as `\uXXXX`, so error text can never close or open the tag. V2-M3's system prompt must state that the block is
   untrusted data and the output schema must give the model no action to take.
 
+## Incident analysis (V2-M3)
+- `POST /api/incidents/{id}/analyze[?force=true]` (requires `X-FlowOps-Token`; 401 beats 503 beats 404) sends EXACTLY the V2-M2
+  context to OpenAI, verifies the answer, stores it in `incident_analyses`. 201 created / 200 reused / 404 / 503 (no
+  `OPENAI_API_KEY`) / 502 (call failed, the attempt is still stored). `GET /api/incidents/{id}/analyses` lists history.
+  NEVER automatic: only that route and the eval script reach a model. The app starts without a key.
+- `incident_analyses` rows are only INSERTED (never updated/deleted). Dedup: without `force`, an existing `ok` row with the same
+  incident + `context_hash` + model + `PROMPT_VERSION` is returned and the model is not called; failed attempts
+  (refused / incomplete / invalid / error) never dedup. The slow call runs with no DB transaction open.
+- `app/analysis/`: `schema.py` (model output; NO `verified`/`root_cause`/action field, confidence = low|medium|high, tested),
+  `verify.py` (PURE server checks: every evidence `ref` is a dotted path to a SCALAR in the sent context, `quote` must occur in it
+  and be >= 8 chars or the whole value; fact without valid evidence removed; hypothesis without it kept `supported=false`; `high`
+  needs >= 2 valid evidence items with DISTINCT refs else `medium`; max 3 hypotheses; text/list caps; `insufficient_evidence`
+  passes through untouched so the eval measures the model), `prompt.py` (`PROMPT_VERSION`; user message = `frame_context(ctx)`
+  only), `analyzer.py` (`Analyzer` protocol + `OpenAIAnalyzer`, the ONLY module importing `openai`).
+- OpenAI call: `client.responses.parse(model, input=[system,user], text_format=AnalysisOutput, max_output_tokens, store=False,
+  [reasoning={"effort"}])`. `store=False` because Responses are kept 30 days by default. Statuses: ok / refused (refusal content
+  item) / incomplete (`status == "incomplete"`, e.g. max_output_tokens: reasoning tokens count against it, hence the 16000
+  default) / invalid (no parsed output, ValidationError) / error (`openai.OpenAIError`: only the class name + HTTP status kept,
+  never a message or body). The adapter never raises for those; the service also catches a misbehaving analyzer.
+- Config (`.env.example`): `OPENAI_API_KEY`, `OPENAI_MODEL` (default `gpt-6-luna`, $0.10/$0.50 per 1M; step up to `gpt-6-sol`
+  $2/$10 only if the eval shows a gap), `OPENAI_REASONING_EFFORT` (empty = model default; none|low|medium|high|xhigh|max),
+  `OPENAI_MAX_OUTPUT_TOKENS`, `OPENAI_TIMEOUT_SECONDS`. A bad value stops startup (`validate_openai_settings`).
+- Dependency `openai==3.50.0` (+ `jiter`, `sniffio`) was approved for V2-M3; it uses the already-pinned `httpx2`.
+- Tests NEVER call OpenAI: autouse `no_real_openai` in `tests/conftest.py` makes constructing `openai.OpenAI` raise and removes
+  `OPENAI_API_KEY` from the environment. Use `tests/analysis_helpers.FakeAnalyzer`; the adapter is tested with a fake client
+  and hand-built responses.
+- `scripts/eval_analysis.py`: loads the corpus into a TEMP database, builds each group's context, default = cost quote only.
+  Trap cases pass only if `insufficient_evidence` is true AND the model claims no `high` hypothesis. Step-up to a bigger model
+  when a trap fails, category accuracy < 80% or > 15% of facts fail verification.
+- THE ASSISTANT MUST NEVER RUN `scripts.eval_analysis --yes` or POST /analyze against the real key: the user's `.env` contains a
+  real `OPENAI_API_KEY` and `config.py` loads it (`env -u` does not help). Live analyses and evals are run by the user.
+- Known limit: two simultaneous analyze requests can both call the model (no lock; costs a fraction of a cent).
+
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,
-  pydantic, python-dotenv, pytest, httpx2, sqlalchemy, jinja2. Ask before adding anything else.
+  pydantic, python-dotenv, pytest, httpx2, sqlalchemy, jinja2 (+ `openai`, approved for V2-M3). Ask before adding anything else.
 - Secrets live in `.env` (git-ignored); keep `.env.example` current. Never hardcode secrets
   or use real production data in tests.
 - Keep business logic out of route functions and templates.

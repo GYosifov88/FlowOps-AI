@@ -12,7 +12,8 @@ from pydantic import (
     model_validator,
 )
 
-from app.models import ExecutionStatus, IncidentStatus
+from app.analysis.schema import VerifiedAnalysis
+from app.models import AnalysisStatus, ExecutionStatus, IncidentStatus
 
 
 class WorkflowCreate(BaseModel):
@@ -159,3 +160,37 @@ class IncidentContextResponse(BaseModel):
     context: dict[str, Any] = Field(
         description="`trusted` = computed by FlowOps (no free text); `untrusted` = scrubbed third-party text"
     )
+
+
+class AnalysisRead(BaseModel):
+    """One stored analysis attempt. Only status "ok" has `analysis`; it is the VERIFIED version
+    (unverifiable facts removed, confidence capped). The context that was sent is not included:
+    reproduce it with GET /api/incidents/{id}/context (compare `context_hash`)."""
+
+    id: int
+    incident_id: int
+    context_hash: str
+    context_version: int
+    prompt_version: str
+    provider: str
+    model: str
+    status: AnalysisStatus
+    analysis: VerifiedAnalysis | None
+    validation_notes: list[str]
+    refusal: str | None
+    error_type: str | None
+    input_tokens: int | None
+    output_tokens: int | None
+    reasoning_tokens: int | None
+    forced: bool
+    created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def mark_as_utc(cls, value: datetime) -> datetime:
+        return value.replace(tzinfo=timezone.utc)
+
+
+class AnalyzeResponse(BaseModel):
+    result: Literal["created", "reused"]
+    analysis: AnalysisRead

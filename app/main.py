@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.config import get_settings
+from app.config import get_settings, validate_openai_settings
 from app.database import init_db
 from app.logging_config import configure_logging
 from app.middleware import RequestContextMiddleware
@@ -21,6 +21,8 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(
             "FLOWOPS_INGEST_TOKEN is not set. Add it to .env (see .env.example)."
         )
+    # A typo in an OPENAI_* value stops startup, like LOG_LEVEL. A missing key is fine.
+    validate_openai_settings(current)
     # Create any missing tables. Idempotent: never drops, alters or seeds anything, so an
     # existing database is untouched (a changed schema still needs scripts.reset_db).
     init_db()

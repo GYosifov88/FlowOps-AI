@@ -1,13 +1,64 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
+from app.analysis.analyzer import Analyzer, OpenAIAnalyzer
+from app.auth import require_ingest_token
+from app.config import Settings, get_settings
 from app.database import get_db
-from app.models import IncidentStatus
-from app.schemas import IncidentContextResponse, IncidentDetail, IncidentPage, IncidentRead
+from app.models import IncidentAnalysis, IncidentStatus
+from app.schemas import (
+    AnalysisRead,
+    AnalyzeResponse,
+    IncidentContextResponse,
+    IncidentDetail,
+    IncidentPage,
+    IncidentRead,
+)
+from app.services import analysis as analysis_service
 from app.services import incident_context
 from app.services import incidents as service
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
+
+
+def get_analyzer(settings: Settings = Depends(get_settings)) -> Analyzer:
+    """The analyzer for this request. Tests override this dependency with a fake."""
+    if not settings.openai_api_key:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "OPENAI_API_KEY is not configured; incident analysis is unavailable",
+        )
+    return OpenAIAnalyzer(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+        reasoning_effort=settings.openai_reasoning_effort,
+        max_output_tokens=settings.openai_max_output_tokens,
+        timeout=settings.openai_timeout_seconds,
+    )
+
+
+def _analysis_read(row: IncidentAnalysis) -> dict:
+    return {
+        "id": row.id,
+        "incident_id": row.incident_id,
+        "context_hash": row.context_hash,
+        "context_version": row.context_version,
+        "prompt_version": row.prompt_version,
+        "provider": row.provider,
+        "model": row.model,
+        "status": row.status,
+        "analysis": json.loads(row.analysis_json) if row.analysis_json else None,
+        "validation_notes": json.loads(row.validation_notes_json) if row.validation_notes_json else [],
+        "refusal": row.refusal,
+        "error_type": row.error_type,
+        "input_tokens": row.input_tokens,
+        "output_tokens": row.output_tokens,
+        "reasoning_tokens": row.reasoning_tokens,
+        "forced": row.forced,
+        "created_at": row.created_at,
+    }
 
 
 def _read(summary: service.IncidentSummary) -> dict:
@@ -75,3 +126,54 @@ def get_incident_context(incident_id: int, db: Session = Depends(get_db)):
         "context_hash": incident_context.context_hash(context),
         "context": context,
     }
+
+
+@router.post(
+    "/{incident_id}/analyze",
+    response_model=AnalyzeResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_ingest_token)],
+    responses={
+        200: {"description": "Reused: an identical analysis (same context, model, prompt) already exists"},
+        502: {"description": "The model call failed (the failed attempt is stored)"},
+        503: {"description": "OPENAI_API_KEY is not configured"},
+    },
+)
+def analyze_incident(
+    incident_id: int,
+    response: Response,
+    force: bool = Query(default=False, description="Call the model again even if an identical analysis exists."),
+    db: Session = Depends(get_db),
+    analyzer: Analyzer = Depends(get_analyzer),
+):
+    """Analyse one incident with the configured model. COSTS MONEY and never runs by itself.
+
+    Requires the `X-FlowOps-Token` header. Sends exactly the context shown by
+    `GET /api/incidents/{id}/context`. The result is verified on the server (every cited
+    reference must exist in that context and every quote must appear in it) and stored; it is
+    never overwritten. Without `force`, an identical earlier analysis is returned for free (200).
+    A refused / incomplete / invalid answer is stored and returned with its status (201);
+    only a failed call is a 502.
+    """
+    try:
+        outcome = analysis_service.analyze_incident(db, incident_id, analyzer, force=force)
+    except service.IncidentNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
+    if outcome.result == "reused":
+        response.status_code = status.HTTP_200_OK
+    if outcome.row.status.value == "error":
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"Analysis failed ({outcome.row.error_type}); the attempt was stored as analysis {outcome.row.id}",
+        )
+    return {"result": outcome.result, "analysis": _analysis_read(outcome.row)}
+
+
+@router.get("/{incident_id}/analyses", response_model=list[AnalysisRead])
+def list_incident_analyses(incident_id: int, db: Session = Depends(get_db)):
+    """Every stored analysis attempt of this incident, newest first (read-only, never calls a model)."""
+    try:
+        rows = analysis_service.list_analyses(db, incident_id)
+    except service.IncidentNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
+    return [_analysis_read(row) for row in rows]

@@ -42,6 +42,20 @@ def restore_logging():
         lg.propagate = propagate
 
 
+@pytest.fixture(autouse=True)
+def no_real_openai(monkeypatch):
+    """Tests NEVER call OpenAI. Constructing the real client fails loudly, and a developer's
+    own OPENAI_API_KEY (loaded from .env at import) is removed from the environment."""
+    import openai
+
+    def refuse(self, *args, **kwargs):
+        raise AssertionError("a test tried to construct openai.OpenAI: use tests/analysis_helpers.FakeAnalyzer")
+
+    monkeypatch.setattr(openai.OpenAI, "__init__", refuse)
+    monkeypatch.setattr(openai.AsyncOpenAI, "__init__", refuse)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+
 @pytest.fixture
 def engine(tmp_path):
     eng = create_db_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
