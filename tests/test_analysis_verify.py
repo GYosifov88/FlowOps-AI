@@ -6,7 +6,7 @@ from app.analysis.schema import (
     Fact,
     Hypothesis,
     RecommendedAction,
-    VerifiedAnalysis,
+    CheckedAnalysis,
 )
 from app.analysis.verify import (
     MAX_HYPOTHESES,
@@ -66,7 +66,7 @@ FORBIDDEN = {"verified", "root_cause", "rootcause", "confirmed", "proven", "cert
              "tools", "command", "execute", "run", "fix", "apply", "probability", "percent", "score"}
 
 
-@pytest.mark.parametrize("model", [AnalysisOutput, VerifiedAnalysis], ids=lambda m: m.__name__)
+@pytest.mark.parametrize("model", [AnalysisOutput, CheckedAnalysis], ids=lambda m: m.__name__)
 def test_no_field_can_claim_a_verified_cause_or_ask_for_an_action(model):
     names = set(property_names(model.model_json_schema()))
     assert names and not (names & FORBIDDEN), names & FORBIDDEN

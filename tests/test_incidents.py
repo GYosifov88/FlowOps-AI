@@ -294,7 +294,7 @@ def test_the_database_rejects_an_unknown_incident_status(populated):
     populated.execute(text("UPDATE incidents SET status = 'open' WHERE id = 1"))  # control: valid value is fine
     populated.commit()
     with pytest.raises(IntegrityError):
-        populated.execute(text("UPDATE incidents SET status = 'resolved' WHERE id = 1"))
+        populated.execute(text("UPDATE incidents SET status = 'closed' WHERE id = 1"))
         populated.commit()
 
 
@@ -386,7 +386,7 @@ def test_list_filters_and_paging(client, post_failed):
     assert only["total"] == 1 and only["items"][0]["normalized_message"] == "gamma"
     assert client.get("/api/incidents?workflow_id=999").json() == {"items": [], "total": 0, "limit": 50, "offset": 0}
     assert client.get("/api/incidents?status=open").json()["total"] == 3
-    assert client.get("/api/incidents?status=resolved").status_code == 422
+    assert client.get("/api/incidents?status=closed").status_code == 422
 
     page = client.get("/api/incidents?limit=1&offset=1").json()
     assert page["total"] == 3 and [i["normalized_message"] for i in page["items"]] == ["beta"]

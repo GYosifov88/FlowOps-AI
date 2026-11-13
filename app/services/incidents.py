@@ -11,12 +11,21 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 import app.signature as signature
 from app.database import NaiveUTCDateTime
-from app.models import ExecutionEvent, ExecutionStatus, Incident, IncidentStatus
+from app.models import (
+    ExecutionEvent,
+    ExecutionStatus,
+    Incident,
+    IncidentAnalysis,
+    IncidentCauseConfirmation,
+    IncidentStatus,
+    IncidentTransition,
+)
+from app.timeutil import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +53,8 @@ class RebuildResult:
     incidents_created: int
     incidents_removed: int
     incidents_total: int
+    # Orphans (no events) that were KEPT because they have analyses, transitions or confirmations.
+    incidents_kept: int = 0
 
 
 def _find_by_signature(db: Session, sig: str) -> Incident | None:
@@ -77,6 +88,50 @@ def _incident_for(db: Session, event: ExecutionEvent) -> tuple[Incident, bool]:
     return incident, True
 
 
+SYSTEM_ACTOR = "flowops"
+
+
+def regress_if_reopened(db: Session, incident: Incident, event: ExecutionEvent) -> bool:
+    """A failure on a RESOLVED incident makes it REGRESSED -- but only if the failure started
+    AFTER the latest resolve. A late-synced execution from before the resolve (the n8n sync
+    re-reads a 24 h window) is attached without reopening anything. The status change and its
+    history row are part of the caller's transaction; nothing is committed here. Returns
+    True if the incident regressed.
+    """
+    if incident.status != IncidentStatus.RESOLVED:
+        return False
+    resolved_at = db.scalar(
+        select(func.max(IncidentTransition.created_at)).where(
+            IncidentTransition.incident_id == incident.id,
+            IncidentTransition.to_status == IncidentStatus.RESOLVED,
+        )
+    )
+    seen = event.started_at or event.created_at or utcnow()
+    if resolved_at is not None and seen <= resolved_at:
+        return False
+    # Conditional, so two concurrent failures cannot both regress it.
+    result = db.execute(
+        update(Incident)
+        .where(Incident.id == incident.id, Incident.status == IncidentStatus.RESOLVED)
+        .values(status=IncidentStatus.REGRESSED)
+    )
+    if result.rowcount != 1:
+        return False
+    db.flush()  # the event needs its id for the history row
+    db.add(
+        IncidentTransition(
+            incident_id=incident.id,
+            from_status=IncidentStatus.RESOLVED,
+            to_status=IncidentStatus.REGRESSED,
+            actor=SYSTEM_ACTOR,
+            event_id=event.id,
+        )
+    )
+    db.expire(incident, ["status"])
+    logger.info("Incident %s regressed (event %s)", incident.id, event.id)
+    return True
+
+
 def assign_incident(db: Session, event: ExecutionEvent) -> Incident | None:
     """Attach `event` to its incident if it is failed; any other status gets none."""
     if event.status != ExecutionStatus.FAILED:
@@ -85,6 +140,8 @@ def assign_incident(db: Session, event: ExecutionEvent) -> Incident | None:
     event.incident = incident
     if created:
         logger.info("New incident for workflow %s (signature %s)", event.workflow_id, incident.signature)
+    else:
+        regress_if_reopened(db, incident, event)  # V2-M4; same transaction
     return incident
 
 
@@ -94,7 +151,8 @@ def rebuild_all(db: Session) -> RebuildResult:
     Run after a rule change (scripts/rebuild_incidents.py). Idempotent: a second run
     changes nothing. Non-failed events are set to no incident. Incidents left with no
     events (their old signature no longer exists) are deleted -- they are derived data, not
-    history, and would otherwise show up as empty ghosts. One transaction: all or nothing.
+    history, and would otherwise show up as empty ghosts -- UNLESS they have analyses,
+    transitions or confirmations (V2-M4): those are kept, reported as `incidents_kept`. One transaction: all or nothing.
     """
     created = 0
     failed = db.scalars(
@@ -120,11 +178,23 @@ def rebuild_all(db: Session) -> RebuildResult:
     db.flush()
     in_use = select(ExecutionEvent.incident_id).where(ExecutionEvent.incident_id.is_not(None))
     orphans = db.scalars(select(Incident).where(Incident.id.not_in(in_use))).all()
+    removed = kept = 0
     for orphan in orphans:
-        db.delete(orphan)
+        if _has_history(db, orphan.id):
+            kept += 1  # analyses / transitions / confirmations are history: never deleted
+        else:
+            db.delete(orphan)
+            removed += 1
     db.commit()
     total = db.scalar(select(func.count()).select_from(Incident))
-    return RebuildResult(len(failed), created, len(orphans), total)
+    return RebuildResult(len(failed), created, removed, total, kept)
+
+
+def _has_history(db: Session, incident_id: int) -> bool:
+    for model in (IncidentAnalysis, IncidentTransition, IncidentCauseConfirmation):
+        if db.scalar(select(model.id).where(model.incident_id == incident_id).limit(1)) is not None:
+            return True
+    return False
 
 
 # ------------------------------------------------------------------ reads

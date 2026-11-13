@@ -12,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.analysis.schema import VerifiedAnalysis
+from app.analysis.schema import CheckedAnalysis, Level
 from app.models import AnalysisStatus, ExecutionStatus, IncidentStatus
 
 
@@ -143,6 +143,9 @@ class IncidentRead(BaseModel):
 
 class IncidentDetail(IncidentRead):
     recent_events: list[EventRead] = Field(description="Up to 10 newest events, newest first")
+    confirmed_cause: "ConfirmationRead | None" = Field(
+        default=None, description="The newest human confirmation, or null (V2-M4)"
+    )
 
 
 class IncidentPage(BaseModel):
@@ -175,7 +178,7 @@ class AnalysisRead(BaseModel):
     provider: str
     model: str
     status: AnalysisStatus
-    analysis: VerifiedAnalysis | None
+    analysis: CheckedAnalysis | None
     validation_notes: list[str]
     refusal: str | None
     error_type: str | None
@@ -194,3 +197,77 @@ class AnalysisRead(BaseModel):
 class AnalyzeResponse(BaseModel):
     result: Literal["created", "reused"]
     analysis: AnalysisRead
+
+
+# ------------------------------------------------------------------ approval (V2-M4)
+
+Actor = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9 ._@-]+$"),
+]
+Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)]
+
+
+class TransitionCreate(BaseModel):
+    """People can only acknowledge or resolve. `open` and `regressed` are set by FlowOps alone."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    to: Literal["acknowledged", "resolved"]
+    actor: Actor = Field(description="Who is doing this. Self-declared: the token proves access, not identity.")
+    note: Note | None = None
+
+
+class TransitionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    incident_id: int
+    from_status: IncidentStatus
+    to_status: IncidentStatus
+    actor: str = Field(description='"flowops" for a regression')
+    note: str | None
+    event_id: int | None = Field(description="The failed event that caused a regression")
+    created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def mark_as_utc(cls, value: datetime) -> datetime:
+        return value.replace(tzinfo=timezone.utc)
+
+
+class TransitionResponse(BaseModel):
+    incident_status: IncidentStatus
+    transition: TransitionRead
+
+
+class ConfirmationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_id: int
+    hypothesis_index: int = Field(ge=0, description="0-based position in that analysis's hypotheses")
+    actor: Actor
+    note: Note = Field(min_length=1, description="What you checked. Required.")
+
+
+class ConfirmationRead(BaseModel):
+    """A person confirmed this hypothesis. The only 'verified' in FlowOps, and it is human."""
+
+    id: int
+    incident_id: int
+    analysis_id: int
+    hypothesis_index: int
+    cause: str | None = Field(description="The hypothesis text, read from the stored analysis")
+    confidence: Level | None = Field(description="What the MODEL claimed (not a verification)")
+    supported: bool | None = Field(description="Whether FlowOps found valid evidence for it")
+    verified_by: str
+    note: str
+    created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def mark_as_utc(cls, value: datetime) -> datetime:
+        return value.replace(tzinfo=timezone.utc)
+
+
+IncidentDetail.model_rebuild()

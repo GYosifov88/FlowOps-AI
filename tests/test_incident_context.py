@@ -76,7 +76,7 @@ def test_exact_key_sets_so_the_allow_list_cannot_grow_silently(db_session, wf):
     assert set(context) == {"context_version", "trusted", "untrusted"}
     trusted = context["trusted"]
     assert set(trusted) == {"incident", "workflow_id", "occurrences", "facts", "error_detail_available"}
-    assert set(trusted["incident"]) == {"id", "signature", "signature_version", "status"}
+    assert set(trusted["incident"]) == {"id", "signature", "signature_version"}
     assert set(trusted["occurrences"]) == {"count", "first_seen", "last_seen", "recent"}
     assert set(trusted["occurrences"]["recent"][0]) == {"seen_at", "mode", "duration_ms"}
     assert set(trusted["facts"]) == {
@@ -353,7 +353,7 @@ def test_the_preview_endpoint_returns_exactly_what_build_context_builds(client, 
     assert set(body) == {"context_version", "context_hash", "context"}
     expected = build_context(db_session, incident_id)
     assert body["context"] == expected
-    assert body["context_version"] == expected["context_version"] == 1
+    assert body["context_version"] == expected["context_version"] == 2
     assert body["context_hash"] == context_hash(expected) and len(body["context_hash"]) == 64
     assert body["context"]["untrusted"]["error"]["description"] == "Rate limited"
     assert marker not in response.text and "error_raw" not in response.text

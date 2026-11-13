@@ -141,7 +141,7 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 
 ## Incident grouping (V2-M1)
 - `Incident` (`app/models.py`) groups FAILED events with the same signature; `ExecutionEvent.incident_id` is nullable
-  (FK RESTRICT, indexed). Only `failed` events ever get one. `IncidentStatus` has only `open` until V2-M4.
+  (FK RESTRICT, indexed). Only `failed` events ever get one. `IncidentStatus` is open | acknowledged | resolved | regressed (V2-M4).
   Adding the table/column needed a DB reset (then re-register the workflow and re-run the sync).
 - `app/signature.py` (PURE, no DB): `signature = sha256("v1|workflow_id|node or <unattributed>|error_name|normalized_message")[:16]`.
   `|` and `%` inside a field are escaped. `error_name`/message come from the `error_raw` JSON (`name`, `message`); anything
@@ -150,7 +150,7 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
   12+ char ids with a digit (or hex)->`<id>`, numbers of 2+ digits->`<n>` except standalone 4xx/5xx codes -> trailing
   punctuation off -> cap 300 (cap is LAST, never splits a placeholder). `tests/test_signature.py` GOLDEN table is the spec.
 - ANY rule change = bump `SIGNATURE_VERSION` + run `python -m scripts.rebuild_incidents` (and update the golden tests/corpus).
-  Rebuild reassigns all failed events, detaches non-failed ones, and DELETES incidents left with no events (derived data;
+  Rebuild reassigns all failed events, detaches non-failed ones, and DELETES incidents left with no events and no history (derived data;
   execution events are never touched).
 - `app/sanitize.py::redact()` is the shared secret scrubber (sanitize_error uses it too).
 - `assign_incident` runs inside `ingest_event` (events.py) in the SAME transaction: ingest commits once at the end and, on an
@@ -214,6 +214,31 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - THE ASSISTANT MUST NEVER RUN `scripts.eval_analysis --yes` or POST /analyze against the real key: the user's `.env` contains a
   real `OPENAI_API_KEY` and `config.py` loads it (`env -u` does not help). Live analyses and evals are run by the user.
 - Known limit: two simultaneous analyze requests can both call the model (no lock; costs a fraction of a cent).
+
+## Incident approval (V2-M4)
+- Lifecycle (`IncidentStatus`, `HUMAN_TRANSITIONS` in `app/models.py`): a person may do open -> acknowledged,
+  regressed -> acknowledged, acknowledged -> resolved. Anything else (open -> resolved, repeating the status, setting
+  open/regressed) is refused: 409 with `{message, current_status, allowed}`, or 422 for a value outside acknowledged|resolved.
+  `ACTIVE_INCIDENT` = {open, regressed} ("counts as open"). The UPDATE is conditional on the status that was read (a rival
+  change = 409, nothing written). `app/services/approval.py` does it; routes are thin.
+- Regression is SYSTEM-only: `incidents.regress_if_reopened`, called from `assign_incident` for an EXISTING incident, same
+  transaction (a rollback undoes it). RESOLVED -> REGRESSED only if the failure's seen time (`started_at`, else `created_at`)
+  is STRICTLY after the latest resolve; an older late-synced failure attaches without reopening. `rebuild_all` never regresses.
+- `incident_transitions` (insert-only history: from/to, actor, note, `event_id` for a regression, actor `flowops`) and
+  `incident_cause_confirmations` (insert-only: incident, `analysis_id`, `hypothesis_index`, `verified_by`, required note).
+  A confirmation points at (analysis_id, index) -- analysis rows never change, so the pointer cannot drift. The analysis must
+  belong to the incident and be `ok`; a `supported=false` hypothesis may be confirmed. Newest confirmation = current cause
+  (`confirmed_cause` on `GET /api/incidents/{id}`); confirming never changes the status. THE ONLY "verified" in FlowOps is
+  `verified_by`, a human: server-checked model output is called "checked" (`CheckedAnalysis`); a test scans OpenAPI for it.
+- API: `POST /api/incidents/{id}/transitions` and `POST .../confirmations` REQUIRE `X-FlowOps-Token` (401 beats 404/422);
+  `GET .../transitions` (oldest first) and `GET .../confirmations` (newest first) are unauthenticated reads.
+- `actor` is self-declared (1-100 of `[A-Za-z0-9 ._@-]`): the token proves access, not identity. Notes are redacted, capped at
+  1000. Neither actor nor note is ever logged. V2-M5's no-JS forms cannot send a header, so M5 must choose its own UI auth.
+- `CONTEXT_VERSION` = 2: `trusted.incident.status` was removed (workflow state is not evidence, and acknowledging must not
+  change `context_hash`, which would defeat the analysis dedup). `rebuild_all` KEEPS orphan incidents that have analyses,
+  transitions or confirmations (`incidents_kept`); only empty orphans are deleted.
+- Adding the tables AND widening the `incident_status` CHECK needs a DB reset (`create_all` never alters a table); then
+  re-register the workflow, re-sync and re-analyze. No n8n writes: the client stays GET-only. Nothing auto-applies.
 
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,

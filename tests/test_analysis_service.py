@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 import app.services.analysis as analysis_service
 from app.analysis.analyzer import AnalyzerResult
 from app.analysis.prompt import PROMPT_VERSION, SYSTEM_PROMPT
-from app.analysis.schema import Fact, VerifiedAnalysis
+from app.analysis.schema import Fact, CheckedAnalysis
 from app.models import AnalysisStatus, ExecutionEvent, IncidentAnalysis
 from app.services.analysis import analyze_incident, list_analyses
 from app.services.incident_context import build_context, context_hash
@@ -68,8 +68,8 @@ def test_a_new_analysis_is_verified_and_stored(db_session, incident_id):
     assert row.status == AnalysisStatus.OK
     assert (row.provider, row.model, row.prompt_version, row.forced) == ("fake", "fake-model-1", PROMPT_VERSION, False)
     assert (row.input_tokens, row.output_tokens, row.reasoning_tokens) == (1500, 2500, 2000)
-    assert row.context_version == 1 and row.refusal is None and row.error_type is None
-    stored = VerifiedAnalysis.model_validate_json(row.analysis_json)
+    assert row.context_version == 2 and row.refusal is None and row.error_type is None
+    stored = CheckedAnalysis.model_validate_json(row.analysis_json)
     assert len(stored.facts) == 2 and stored.hypotheses[0].supported is True
     assert json.loads(row.validation_notes_json) == []
 
@@ -93,7 +93,7 @@ def test_unverifiable_claims_are_removed_before_storing_and_the_notes_are_kept(d
     analyze_incident(db_session, incident_id, FakeAnalyzer([ok_result(output)]))
 
     (row,) = rows(db_session)
-    stored = VerifiedAnalysis.model_validate_json(row.analysis_json)
+    stored = CheckedAnalysis.model_validate_json(row.analysis_json)
     assert [f.statement for f in stored.facts] == ["Real."]
     notes = json.loads(row.validation_notes_json)
     assert any("fact[0] removed" in n for n in notes)

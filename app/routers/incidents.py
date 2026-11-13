@@ -11,12 +11,18 @@ from app.models import IncidentAnalysis, IncidentStatus
 from app.schemas import (
     AnalysisRead,
     AnalyzeResponse,
+    ConfirmationCreate,
+    ConfirmationRead,
     IncidentContextResponse,
     IncidentDetail,
     IncidentPage,
     IncidentRead,
+    TransitionCreate,
+    TransitionRead,
+    TransitionResponse,
 )
 from app.services import analysis as analysis_service
+from app.services import approval
 from app.services import incident_context
 from app.services import incidents as service
 
@@ -57,6 +63,22 @@ def _analysis_read(row: IncidentAnalysis) -> dict:
         "output_tokens": row.output_tokens,
         "reasoning_tokens": row.reasoning_tokens,
         "forced": row.forced,
+        "created_at": row.created_at,
+    }
+
+
+def _confirmation_read(view: approval.ConfirmationView) -> dict:
+    row = view.row
+    return {
+        "id": row.id,
+        "incident_id": row.incident_id,
+        "analysis_id": row.analysis_id,
+        "hypothesis_index": row.hypothesis_index,
+        "cause": view.cause,
+        "confidence": view.confidence,
+        "supported": view.supported,
+        "verified_by": row.verified_by,
+        "note": row.note,
         "created_at": row.created_at,
     }
 
@@ -105,7 +127,12 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
         summary, recent = service.get_incident(db, incident_id)
     except service.IncidentNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
-    return {**_read(summary), "recent_events": recent}
+    cause = approval.confirmed_cause(db, incident_id)
+    return {
+        **_read(summary),
+        "recent_events": recent,
+        "confirmed_cause": _confirmation_read(cause) if cause else None,
+    }
 
 
 @router.get("/{incident_id}/context", response_model=IncidentContextResponse)
@@ -177,3 +204,80 @@ def list_incident_analyses(incident_id: int, db: Session = Depends(get_db)):
     except service.IncidentNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
     return [_analysis_read(row) for row in rows]
+
+
+# ------------------------------------------------------------------ approval (V2-M4)
+
+
+@router.post(
+    "/{incident_id}/transitions",
+    response_model=TransitionResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_ingest_token)],
+    responses={409: {"description": "Not an allowed move from the current status (body lists the allowed ones)"}},
+)
+def transition_incident(incident_id: int, data: TransitionCreate, db: Session = Depends(get_db)):
+    """Acknowledge or resolve an incident. Requires `X-FlowOps-Token`.
+
+    Allowed: open -> acknowledged, regressed -> acknowledged, acknowledged -> resolved.
+    Everything else is a 409, including repeating the current status and open -> resolved.
+    A resolved incident becomes `regressed` by itself when a new failure arrives; people cannot set it.
+    """
+    try:
+        incident, row = approval.transition(db, incident_id, IncidentStatus(data.to), data.actor, data.note)
+    except service.IncidentNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
+    except approval.InvalidTransition as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "message": f"Cannot move from {exc.current.value} to {data.to}",
+                "current_status": exc.current.value,
+                "allowed": [s.value for s in exc.allowed],
+            },
+        )
+    return {"incident_status": incident.status, "transition": row}
+
+
+@router.get("/{incident_id}/transitions", response_model=list[TransitionRead])
+def list_incident_transitions(incident_id: int, db: Session = Depends(get_db)):
+    """Status history, oldest first."""
+    try:
+        return approval.list_transitions(db, incident_id)
+    except service.IncidentNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
+
+
+@router.post(
+    "/{incident_id}/confirmations",
+    response_model=ConfirmationRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_ingest_token)],
+    responses={422: {"description": "Not an ok analysis of this incident, or no such hypothesis"}},
+)
+def confirm_incident_cause(incident_id: int, data: ConfirmationCreate, db: Session = Depends(get_db)):
+    """A person confirms ONE hypothesis of a stored analysis. Requires `X-FlowOps-Token`.
+
+    The only place a cause becomes "verified", and it is a human doing it. The newest
+    confirmation is the incident's current cause; older ones stay as history. It does not
+    change the incident status and nothing is applied automatically.
+    """
+    try:
+        view = approval.confirm_cause(
+            db, incident_id, data.analysis_id, data.hypothesis_index, data.actor, data.note
+        )
+    except service.IncidentNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
+    except approval.InvalidConfirmation as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, exc.reason)
+    return _confirmation_read(view)
+
+
+@router.get("/{incident_id}/confirmations", response_model=list[ConfirmationRead])
+def list_incident_confirmations(incident_id: int, db: Session = Depends(get_db)):
+    """Every confirmation, newest first."""
+    try:
+        views = approval.list_confirmations(db, incident_id)
+    except service.IncidentNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
+    return [_confirmation_read(v) for v in views]

@@ -27,8 +27,8 @@ from app.analysis.schema import (
     Evidence,
     Fact,
     RecommendedAction,
-    VerifiedAnalysis,
-    VerifiedHypothesis,
+    CheckedAnalysis,
+    CheckedHypothesis,
 )
 
 MAX_HYPOTHESES = 3
@@ -121,7 +121,7 @@ class VerifyStats:
 
 @dataclass(frozen=True)
 class VerifyResult:
-    analysis: VerifiedAnalysis
+    analysis: CheckedAnalysis
     notes: list[str]
     stats: VerifyStats
 
@@ -139,7 +139,7 @@ def verify_analysis(output: AnalysisOutput, context: dict) -> VerifyResult:
 
     if len(output.hypotheses) > MAX_HYPOTHESES:
         notes.append(f"{len(output.hypotheses)} hypotheses returned; kept the first {MAX_HYPOTHESES}")
-    hypotheses: list[VerifiedHypothesis] = []
+    hypotheses: list[CheckedHypothesis] = []
     for i, hypothesis in enumerate(output.hypotheses[:MAX_HYPOTHESES]):
         evidence = _valid_evidence(context, hypothesis.supporting_evidence, f"hypothesis[{i}]", notes)
         supported = bool(evidence)
@@ -153,7 +153,7 @@ def verify_analysis(output: AnalysisOutput, context: dict) -> VerifyResult:
                 f"high needs at least {HIGH_NEEDS_DISTINCT_REFS} valid evidence items with distinct refs"
             )
         hypotheses.append(
-            VerifiedHypothesis(
+            CheckedHypothesis(
                 cause=_clip(hypothesis.cause),
                 confidence=confidence,
                 supporting_evidence=evidence,
@@ -171,7 +171,7 @@ def verify_analysis(output: AnalysisOutput, context: dict) -> VerifyResult:
         RecommendedAction(step=_clip(a.step), risk=a.risk) for a in output.recommended_actions[:LIST_CAP]
     ]
 
-    analysis = VerifiedAnalysis(
+    analysis = CheckedAnalysis(
         summary=_clip(output.summary),
         category=output.category,
         facts=facts,

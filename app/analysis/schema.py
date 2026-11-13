@@ -1,13 +1,14 @@
 """The structured shape of an incident analysis (V2-M3).
 
 `AnalysisOutput` is what the MODEL must return (sent to OpenAI as a strict JSON schema).
-`VerifiedAnalysis` is what FlowOps STORES after app.analysis.verify has checked it.
+`CheckedAnalysis` is what FlowOps STORES after app.analysis.verify has checked it.
 
 Design rules (they are tested, see tests/test_analysis_verify.py):
 
 * There is NO field that says a cause is verified, confirmed or the root cause. A cause can
   only ever be a HYPOTHESIS. "Verified" exists in one place in the product: a human
-  confirming a hypothesis (V2-M4).
+  confirming a hypothesis (V2-M4, app.schemas.Confirmation*). Server-checked output is called
+  "checked", never "verified".
 * Confidence is a category (low / medium / high), never a percentage.
 * The schema offers the model no action to take, no tool, no command: recommended actions
   are suggestions for a human.
@@ -67,15 +68,15 @@ class AnalysisOutput(_Strict):
     recommended_actions: list[RecommendedAction]
 
 
-class VerifiedHypothesis(Hypothesis):
+class CheckedHypothesis(Hypothesis):
     # False = none of its evidence resolved to a real context field with a matching quote.
     supported: bool
 
 
-class VerifiedAnalysis(_Strict):
+class CheckedAnalysis(_Strict):
     summary: str
     category: Category
     facts: list[Fact]
-    hypotheses: list[VerifiedHypothesis]
+    hypotheses: list[CheckedHypothesis]
     insufficient_evidence: bool
     recommended_actions: list[RecommendedAction]

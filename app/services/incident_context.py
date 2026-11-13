@@ -35,7 +35,9 @@ from app.models import ExecutionEvent, ExecutionStatus, Workflow
 from app.sanitize import scrub
 from app.services.incidents import RECENT_EVENTS, get_incident, seen_at
 
-CONTEXT_VERSION = 1
+# 2: `trusted.incident.status` removed (V2-M4). Workflow state is not evidence, and acknowledging an
+# incident must not change the hash (it would defeat the analysis dedup and cost money).
+CONTEXT_VERSION = 2
 FRAME_TAG = "untrusted_incident_data"
 RECENT_IN_CONTEXT = 5
 STACK_LINES = 15
@@ -193,7 +195,6 @@ def build_context(db: Session, incident_id: int) -> dict:
                 "id": incident.id,
                 "signature": incident.signature,
                 "signature_version": incident.signature_version,
-                "status": incident.status.value,
             },
             "workflow_id": incident.workflow_id,
             "occurrences": {

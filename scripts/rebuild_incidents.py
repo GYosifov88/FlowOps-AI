@@ -5,7 +5,8 @@ Run from the repo root:  python -m scripts.rebuild_incidents
 Needed after changing a rule in app/signature.py (and bumping SIGNATURE_VERSION). Safe to
 repeat: a second run changes nothing. Failed events are re-attached to the incident their
 current signature gives; incidents left with no events are removed (they are derived data;
-no execution event is ever touched or deleted). Stop the app first to be safe.
+no execution event is ever touched or deleted) unless they have analyses, status
+history or a confirmed cause: those are kept. Stop the app first to be safe.
 """
 import sys
 
@@ -19,10 +20,11 @@ from app.signature import SIGNATURE_VERSION
 def main() -> int:
     with sessionmaker(bind=database.engine)() as db:
         result = rebuild_all(db)
+    kept = f", {result.incidents_kept} kept for their history" if result.incidents_kept else ""
     print(
         f"Signature version {SIGNATURE_VERSION}: {result.failed_events} failed events -> "
         f"{result.incidents_total} incidents "
-        f"({result.incidents_created} created, {result.incidents_removed} removed)"
+        f"({result.incidents_created} created, {result.incidents_removed} removed{kept})"
     )
     return 0
 
