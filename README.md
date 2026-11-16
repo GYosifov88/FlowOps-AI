@@ -1,73 +1,156 @@
 # FlowOps AI
 
-**A small self-hosted dashboard that records automation runs (n8n first), so you can see what ran, what failed and why in one place.**
+**A local monitor for n8n automations: it pulls execution history, groups failures into incidents, asks an LLM for *hypotheses* about the cause, and keeps a human in charge of what counts as confirmed.**
 
-n8n tells you about a failure only if you go looking for it in its own execution list. FlowOps
-keeps a separate, queryable history of runs with statuses, timings and sanitized error
-messages. The longer-term goal is to have an LLM suggest troubleshooting steps for failures.
+n8n shows a failure only if you open its execution list, and a flaky workflow produces the same
+error dozens of times. FlowOps keeps its own queryable history of runs, groups repeated failures
+into one incident, and can ask a model to suggest what went wrong. The interesting part is not the
+model call; it is how little the model is trusted. Nothing it says is called a fact or a cause
+unless the server can check it against the data that was sent, and nothing is called *verified*
+unless a person confirms it.
 
-> **Status: V1 works locally; AI analysis is not built.** This is a learning and portfolio
-> project, built one milestone at a time (M1-M6.5) with [Claude Code](https://claude.com/claude-code).
-> It is not a production service, and it does **not** talk to a real n8n instance yet:
-> today, events arrive through its own API (for example from the seed script).
+> **Status: complete (V1 + V2).** A personal learning and portfolio project, built one milestone
+> at a time with [Claude Code](https://claude.com/claude-code). It runs on localhost only and is
+> **not deployed**; see [Roadmap](#roadmap-and-what-is-not-built) for what deployment would need.
 
 ## Screenshots
 
-Synthetic data from `python -m scripts.seed`.
+Dashboard, with the open-incidents card and recent executions:
 
 ![Dashboard](screenshots/dashboard.png)
 
-![Events](screenshots/events.png)
+An incident: occurrences, the analysis split into facts and hypotheses, and the approval controls:
 
-![Workflows](screenshots/workflows.png)
+![Incident](screenshots/incident.png)
 
-## What works today (V1)
+## What it does
 
-- **Workflow registry.** REST CRUD for the automations you track (name, source, external id,
-  description). Deleting is a *soft delete*: the workflow is deactivated and its history is kept.
-  A deactivated workflow can be re-activated.
-- **Event ingestion.** `POST /api/events` records one execution event.
-  - **Token auth:** a shared secret in the `X-FlowOps-Token` header, compared with
-    `secrets.compare_digest`. The app refuses to start if no token is configured.
-  - **Upsert, not just dedup:** events are keyed on `external_event_id`. A `running` event that
-    later arrives as `success`, `failed` or `canceled` updates the same row; a finished event is
-    never overwritten; an event without an id is always inserted.
-  - **Error sanitizing:** the raw error text is stored as received but never returned or
-    rendered. Only a redacted, length-capped `error_summary` is shown.
-- **Querying.** `GET /api/events` filters by workflow, status and date range, with limit/offset
-  paging and a total count. Date bounds are UTC, `from` is inclusive and `to` is exclusive (a bare
-  `to` date covers that whole day).
-- **Dashboard.** Server-rendered Jinja2 pages: counts by status, recent executions, recent
-  failures, a workflows list and a filterable, paged events list, with empty states for a fresh install.
-- **Observability.** One log format (readable text or JSON lines, UTC times) with the level from
-  `LOG_LEVEL`. Every request gets an `X-Request-ID` (reused from the caller if it sends a
-  well-formed one, so a single event can be traced end to end) that appears on every log line
-  for that request and in the response header. Unexpected errors are logged once with the full
-  traceback, while the client gets a clean `500` JSON body with the request id; no stack trace.
-- **n8n pull sync.** `python -m scripts.sync_n8n` reads the executions of the n8n workflows you
-  registered and feeds them through the same upsert. It is read-only towards n8n (GET requests
-  only), asks for execution *data* only for failed runs, and keeps just the error's name,
-  message, stack and failing node name, never the run data. Developed against recorded (scrubbed)
-  n8n responses; see "Syncing from n8n" below.
-- **Tests.** 438 pytest tests. Each test gets its own fresh SQLite file, so they are
-  order-independent.
+- **Read-only pull-sync of n8n.** `python -m scripts.sync_n8n` reads the execution history of the
+  n8n workflows you registered and feeds it through the same upsert as the API. The n8n client has
+  only GET methods (a test asserts it cannot write), requires `https` unless the host is
+  localhost, and never follows redirects.
+- **Incidents with deterministic signatures.** Failed executions that share a cause are grouped:
+  the signature is a hash of workflow, failing node, error name and a *normalized* message (numbers,
+  ids, URLs, e-mails and timestamps replaced by placeholders). No model is involved in grouping.
+  Counts and first/last seen are computed by query, never stored, so they cannot drift from the events.
+- **OpenAI incident analysis, on demand only.** One button (or one API call) sends a scrubbed
+  context to the model and stores a structured, checked answer. It never runs automatically, and
+  it costs money (a fraction of a cent per analysis on the default model).
+- **Human approval workflow.** `open → acknowledged → resolved`; a new failure after a resolve
+  makes the incident `regressed`. A person can confirm one hypothesis with a note. Everything is
+  recorded in insert-only history. Nothing auto-applies.
+- **Server-rendered UI with session auth.** Jinja2 pages, no JavaScript: dashboard, workflows,
+  events, an incident list and an incident detail page. Reading is open; every action needs an
+  unlocked session.
+- **Plus the V1 basics:** workflow registry with soft delete, token-protected event ingestion with
+  upsert (a `running` event can later become `success`/`failed`, a finished one is final), event
+  queries with date filters and paging, structured logs with a request id on every line.
 
-**Not built yet:** push from n8n, a scheduler inside the app, LLM analysis, LangGraph, dashboard
-login, HTTPS, migrations, metrics.
+## Design decisions
 
-## Tech stack, and why
+### 1. Anti-hallucination by construction
 
-| Piece | Why |
+An LLM will sound confident about a cause it cannot see (FlowOps cannot see your credentials or the
+remote system). So the design makes certainty impossible to express rather than asking nicely:
+
+- **The output schema has no way to claim a verified cause.** There is no `verified`, `root_cause`
+  or action field. A cause can only be a *hypothesis*, with a categorical confidence
+  (`low | medium | high`, never a percentage) and a list of things a human could check to confirm it.
+  A test scans the generated schemas for those words.
+- **Every piece of evidence is checked on the server.** Each fact and hypothesis cites evidence as
+  `{ref, quote}`: `ref` is a dotted path to one value in the context that was actually sent, and
+  `quote` must appear in that value (at least 8 characters, or the whole value, so `"a"` proves
+  nothing). A fact without a valid citation is removed. A hypothesis without one is kept but marked
+  `unsupported`, and the UI shows it.
+- **A deterministic confidence ceiling.** `high` needs at least two valid evidence items with
+  distinct refs; otherwise it is lowered to `medium` and a note records why. At most three
+  hypotheses are kept.
+- **"Verified" exists in exactly one place: a person confirming a cause.** The confirmation stores
+  who, when, a required note, and points at one hypothesis of one stored analysis. The UI shows
+  three clearly different things: `Fact · checked`, `AI hypothesis` (with confidence), and
+  `Confirmed cause`. A test removes the confirmed-cause box from every page and asserts the word
+  "verified" appears nowhere else. Server-checked model output is called *checked*, never *verified*.
+- **Append-only history.** Analyses, status changes and confirmations are only ever inserted. A
+  repeat analysis of an unchanged context is returned from the stored result (no model call);
+  failed attempts are stored too.
+- **An opt-in eval harness** (`python -m scripts.eval_analysis`) runs the model over 30 labelled
+  synthetic failures in 20 groups, including trap cases where the right answer is "not enough
+  evidence". By default it only prints a cost quote and sends nothing.
+
+What this does *not* do: the check proves a quote is really in the data, not that the model's
+conclusion is true. Hypotheses are guesses; that is why a person confirms them.
+
+### 2. Prompt-injection defence
+
+Error messages are third-party text and can say "ignore previous instructions". The context is
+split into `trusted` (computed by FlowOps: ids, counts, enums, timestamps, no free text) and
+`untrusted` (names and error text, scrubbed). It is wrapped in `<untrusted_incident_data>`, with
+`<`, `>` and `&` written as `\uXXXX` inside, so error text cannot close or open the tag. The system
+prompt says the block is data and never instructions, and, most importantly, the output schema gives
+the model no action to take. There is a test that feeds a hostile error message through.
+
+### 3. Data minimisation and sanitization
+
+- **Pulled from n8n:** the list call never asks for execution data; data is requested only for
+  failed runs, one at a time, and only an allow-list is kept (error name, message, description, HTTP
+  code, stack, and the failing node's *name*). The rest of the node object (it can carry credentials
+  and parameters) and all run data are discarded unread.
+- **Sent to the model:** a further allow-listed projection (message, description, HTTP code, at most
+  15 stack lines), passed through secret redaction and a PII scrub (e-mails, URL credentials and
+  query strings, card/IBAN/long digit runs, phone numbers). The call uses `store=False`, so OpenAI
+  does not retain the response. `GET /api/incidents/{id}/context` previews exactly what would be sent.
+- **Shown to you:** the raw error text is stored as received but has no field in any response schema
+  and is never rendered. Pages show only a redacted, capped `error_summary`.
+- **Honest limit:** scrubbing is best-effort. Personal *names* and street addresses are not caught;
+  minimisation (not sending run data at all) is the real control.
+
+### 4. Read-only, pull-only n8n integration
+
+FlowOps never writes to n8n and suggests actions only as text for a person. It pulls rather than
+being pushed to: a failure-only push (n8n's Error Trigger) could not feed success counts, would need
+FlowOps reachable from outside, and loses events when the laptop is asleep, while a pull just
+catches up. Late finishers are handled with a 24-hour overlap window, and executions n8n has pruned
+are reported as a possible gap. The failing node is taken only from the error itself, never from "last
+node executed", and stays empty when n8n does not say.
+
+### 5. CSRF on localhost, with no JavaScript and no new dependency
+
+The API authenticates with an `X-FlowOps-Token` header, which a plain HTML form cannot send. The
+pages therefore use a short session: `/unlock` checks the token once (constant-time) and sets an
+HMAC-signed cookie (HttpOnly, SameSite=Strict, 12 h) that contains a name and a nonce, never the
+token. The signing key is derived from the token, so rotating the token logs everyone out.
+
+SameSite alone is not enough here: browsers treat every port on `localhost` as the *same site*, so
+another local web app could post with the cookie. Every action POST therefore also passes a
+per-session CSRF token and an Origin/Host check (Host must be `localhost`, `127.0.0.1` or `[::1]`,
+and Origin must be exactly this site, which also blocks DNS rebinding). Forms are parsed with the
+standard library, capped at 16 KB. The recorded actor comes from the session, never from a form
+field. The session code and its tests are in `app/ui_auth.py`, `tests/test_ui_auth.py`.
+
+### Smaller decisions
+
+- **Timestamps are naive UTC in the database**, `Z`-suffixed in the API, local time only for display.
+- **Sync SQLAlchemy and plain `def` routes**, and portable SQL only, so PostgreSQL stays possible.
+- **Throwaway database for now:** no migrations; a schema change means `reset_db`. Startup only
+  creates missing tables.
+- **Analyzer behind a small interface**, with a fake in tests. The test suite never constructs an
+  OpenAI client (a fixture makes that raise) and needs no key.
+
+## Tech stack
+
+| Piece | Used for |
 |---|---|
-| **Python 3.12 + FastAPI** | Type-hint-driven validation, and interactive API docs for free at `/docs`. |
-| **Pydantic** | Separate input and output schemas, so the API never returns a raw database object. |
-| **SQLAlchemy 2.0 + SQLite** | Zero setup for a local project. Sync sessions and plain `def` routes keep it simple; SQL stays portable so PostgreSQL remains an option. |
-| **Jinja2** | A server-rendered dashboard needs no JavaScript build step, and its autoescaping is a safety net for user-supplied text. |
-| **pytest + httpx2** | Fast API tests against a real SQLite file per test. |
-| **python-dotenv** | Secrets and settings live in a git-ignored `.env`. |
+| Python 3.12, FastAPI, Uvicorn | API and pages; interactive docs at `/docs` |
+| Pydantic | Separate input/output schemas; strict structured output from the model |
+| SQLAlchemy 2.0 + SQLite | Sync sessions, WAL, CHECK constraints on every status column |
+| Jinja2 | Server-rendered pages with autoescaping; no JS, no static files |
+| OpenAI Python SDK (`responses.parse`) | Structured incident analysis; default model `gpt-6-luna`, configurable |
+| `httpx2` | The read-only n8n client |
+| Standard library | Session cookies (`hmac`, `hashlib`), form parsing, hashing |
+| pytest | **1100 tests**, a fresh SQLite file per test; no network access |
 
-No frontend framework, Docker, Redis, Celery or vector database, on purpose: the project is
-small enough not to need them.
+Dependencies are pinned in `requirements.txt` (`openai` also brings `jiter` and `sniffio`). No
+frontend framework, Docker, Redis, Celery, vector database, LangChain or LangGraph.
 
 ## Setup and run (Windows PowerShell)
 
@@ -80,162 +163,119 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Then open `.env` and set `FLOWOPS_INGEST_TOKEN` (required). To generate a value:
+Edit `.env`:
 
-```powershell
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
+| Variable | Needed for | Notes |
+|---|---|---|
+| `FLOWOPS_INGEST_TOKEN` | **always** | The app will not start without it. Also the password for `/unlock`. Generate: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `N8N_BASE_URL`, `N8N_API_KEY` | `scripts.sync_n8n` | `https` unless localhost. Create the key in n8n under Settings, API |
+| `OPENAI_API_KEY` | Analyze only | The app starts without it; analysis then says it is unavailable |
+| `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENAI_MAX_OUTPUT_TOKENS`, `OPENAI_TIMEOUT_SECONDS` | optional | Defaults in `.env.example`; a bad value stops startup |
+| `DATABASE_URL`, `APP_NAME`, `LOG_LEVEL`, `LOG_FORMAT` | optional | SQLite file in the repo root by default |
 
-Start the app. It creates any missing database tables on startup:
+Start the app (it creates any missing tables):
 
 ```powershell
 python -m uvicorn app.main:app --reload
 ```
 
-- Dashboard: http://localhost:8000/ (also `/workflows` and `/events`)
-- API docs: http://localhost:8000/docs
-- Health check: http://localhost:8000/health
+Dashboard at http://localhost:8000/, API docs at http://localhost:8000/docs.
 
-With the app running, in a second terminal, load synthetic data (safe to repeat):
+**Without n8n**, load synthetic workflows and events (app running; safe to repeat). Its failures
+form incidents:
 
 ```powershell
 python -m scripts.seed
 ```
 
-Run the tests:
+**With n8n:** register each workflow you want tracked, using its n8n id as `external_id`, then sync
+(the app does not need to be running for the sync):
 
 ```powershell
-python -m pytest
-```
-
-To wipe the database and start over (**deletes all data**; stop the app first):
-
-```powershell
-python -m scripts.reset_db --yes
-```
-
-### Try the API
-
-After seeding, workflow `1` exists. Send an event (replace the token with yours):
-
-```powershell
-$body = @{ workflow_id = 1; external_event_id = "demo-1"; status = "running"; started_at = "2026-10-27T09:00:00Z" } | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/events `
-  -Headers @{ "X-FlowOps-Token" = "<your token>" } -ContentType "application/json" -Body $body
-```
-
-Sending the same `external_event_id` again with `status = "success"` and a `finished_at` updates
-that row in place (`"result": "updated"`).
-
-### Syncing from n8n
-
-1. In `.env`, set `N8N_BASE_URL` (for example `https://your-n8n-host`) and `N8N_API_KEY` (an n8n
-   API key; create it in n8n under Settings, API). The URL must be `https` unless it is localhost.
-2. Register each n8n workflow you want tracked, with its n8n id as `external_id` and `source`
-   `n8n` (the pair must be unique; a duplicate gets a 409):
-
-```powershell
-$body = @{ name = "My workflow"; source = "n8n"; external_id = "<the workflow id from n8n's URL>" } | ConvertTo-Json
+$body = @{ name = "My workflow"; source = "n8n"; external_id = "<id from the n8n URL>" } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/workflows -ContentType "application/json" -Body $body
+
+python -m scripts.sync_n8n              # one run
+python -m scripts.sync_n8n --loop 300   # repeat every 5 minutes
 ```
 
-3. Run the sync (the app does not need to be running):
+The sync prints per-workflow counts and warnings (possible gaps, unregistered n8n workflows). It
+exits 0 on success, 1 if n8n is unreachable or rejects the key, 2 on a configuration problem.
+n8n prunes old executions, so only what it still holds can be imported.
+
+**Using the incident pages:** open http://localhost:8000/incidents. To act, go to `/unlock` and enter
+the token and your name (recorded as the actor). Then you can acknowledge, resolve, **Analyze**
+(a paid model call, only when you click), and confirm a hypothesis with a note.
+
+Other commands:
 
 ```powershell
-python -m scripts.sync_n8n              # one run
-python -m scripts.sync_n8n --loop 300   # repeat every 5 minutes (Ctrl+C to stop)
+python -m pytest                          # the test suite
+python -m scripts.rebuild_incidents       # regroup after a signature-rule change (idempotent)
+python -m scripts.eval_analysis           # quote the cost of the analysis eval; sends nothing
+python -m scripts.eval_analysis --yes     # really calls OpenAI and spends money
+python -m scripts.reset_db --yes          # DELETES the database; stop the app first
 ```
 
-Each run prints per-workflow counts (created / updated / unchanged / skipped), warnings, and the
-active n8n workflows that are not registered in FlowOps (they are reported, never imported). For
-unattended runs, schedule the one-shot command with Windows Task Scheduler every 5 minutes.
+A schema change (for example after pulling a new milestone) needs `reset_db`; then re-register your
+workflows, re-sync and re-analyze.
 
-Things to know:
-- The first run imports everything n8n still has. n8n prunes old executions (by default after 14
-  days or 10,000 executions), so FlowOps can only recover what n8n still holds; if a run finds
-  that executions were pruned since the last one, it warns about a "possible gap".
-- Unfinished executions are re-checked on later runs: for 24 hours (running/unknown) or 30 days
-  (waiting).
-- It warns when a workflow's settings tell n8n not to save executions, because then there is
-  nothing to sync.
-- Exit codes: 0 ok, 1 n8n unreachable or rejected the key, 2 configuration problem.
+## Architecture
 
-### Configuration
+```
+n8n (read-only GET) ─► sync ─┐
+POST /api/events ────────────┴─► ingest ─► group ─► context ─► analyze ─► approve ─► UI
+                                 upsert    incident   scrubbed   model +     human      Jinja2
+                                 + sanitize signature  allow-list server      confirms   pages
+                                                       + frame    checks
+```
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `FLOWOPS_INGEST_TOKEN` | *(required)* | Shared secret for `POST /api/events`; the app will not start without it |
-| `N8N_BASE_URL` | *(sync only)* | Your n8n address, `https` unless localhost |
-| `N8N_API_KEY` | *(sync only)* | n8n API key; sent only to that address, never logged |
-| `DATABASE_URL` | `flowops.db` in the repo root | SQLite database |
-| `APP_NAME` | `FlowOps AI` | App title in `/docs` |
-| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`; an invalid value stops startup |
-| `LOG_FORMAT` | `text` | `text` (readable) or `json` (one object per line) |
-| `FLOWOPS_BASE_URL` | `http://localhost:8000` | Only used by `scripts.seed` |
+- **Ingest:** `routers/events.py` → `services/events.py`. Upsert on the external event id, error
+  sanitizing, then incident assignment in the same transaction.
+- **Group:** `signature.py` (pure) and `services/incidents.py`. A failure after a resolve flips the
+  incident to `regressed` in that same transaction.
+- **Context:** `services/incident_context.py` builds exactly what a model would be sent, with its hash.
+- **Analyze:** `app/analysis/` (`prompt`, `schema`, `verify`, `analyzer`) and `services/analysis.py`.
+  `analyzer.py` is the only module that imports `openai`.
+- **Approve:** `services/approval.py`: transitions, regression history, cause confirmations.
+- **UI:** `routers/pages.py`, `services/incident_views.py`, `ui_auth.py`, `templates/`.
 
-## Design decisions
+API (JSON): `/api/workflows`, `/api/events`, and `/api/incidents` with `/{id}`, `/{id}/context`,
+`/{id}/analyze`, `/{id}/analyses`, `/{id}/transitions`, `/{id}/confirmations`. Writes need the
+`X-FlowOps-Token` header; reads are open. Full details are in `/docs`.
 
-- **Upsert for events.** n8n reports a run as "running" and later as finished. Plain
-  de-duplication would leave every execution stuck in `running`, so a non-finished event may be
-  completed exactly once, and a finished one is final.
-- **Raw errors are never shown.** Error payloads can contain tokens and personal data. They are
-  stored as received but have no field in any API response or template; only the redacted summary
-  does. The redaction is best-effort (it covers obvious patterns like bearer tokens, API keys and
-  passwords) and is not a guarantee, which is why the raw text is never exposed at all.
-- **UTC everywhere in storage.** Timestamps are stored as naive UTC, returned by the API with
-  an explicit `Z`, and converted to local time only for display in the dashboard.
-- **Throwaway database in V1.** There are no migrations. Any schema change means deleting the
-  database and re-seeding (`reset_db`). Alembic is planned for a later phase, once there is data
-  worth keeping. Startup only creates missing tables; it never alters or drops anything.
-- **Localhost-only, no login on the dashboard.** This is a deliberate V1 assumption, not an
-  oversight. Writing events needs the token, but reading the dashboard and `GET /api/events` does
-  not. Before this is exposed to a network, the dashboard needs authentication and HTTPS.
-- **Pull, not push, for n8n.** The first idea was to use both channels: pull from n8n's REST API
-  for completeness and push from its Error Trigger for fast failure alerts. I argued against it
-  and chose pull only. Push alone could not feed a dashboard (the Error Trigger fires only on
-  failures, so success counts would be missing), and FlowOps has no alerting that would use the
-  extra speed. Push would also need FlowOps reachable from outside, which breaks the
-  localhost-only assumption, and a push to a laptop that is asleep is lost, while a pull simply
-  catches up. Push stays deferred, with written conditions for reconsidering it.
-- **The failing node comes only from the error itself.** n8n also reports the last node that
-  ran, but that is not necessarily the node that failed, so it is never used. If n8n gives no
-  node, the field stays empty rather than being filled with a guess.
-- **Minimal data from n8n.** Execution data can hold customer data, so it is requested only for
-  failed runs and only the error's own fields are kept; everything else is discarded unread.
+## Roadmap and what is not built
 
-## Roadmap (planned, none of this exists yet)
+This is a finished V1 + V2, not a production service.
 
-- **n8n integration, next steps:** show detected gaps and unmonitored workflows on the dashboard,
-  and flag workflows that went quiet. Push stays deferred unless alerting is added.
-- **V2 - AI incident analysis:** send a failure's sanitized context to an LLM and get structured
-  troubleshooting suggestions back. This needs a deliberately varied set of synthetic failures to
-  evaluate against, since real failures will be few and similar.
-- **V3 - LangGraph:** multi-step incident analysis with conditional routing, state and a human
-  approval step.
-- **Hardening:** migrations (Alembic), dashboard authentication and HTTPS before any deployment.
+- **Deployment is not done and would need work first.** HTTPS (the session cookie is deliberately not
+  `Secure` because V1 is plain http on localhost); a `Secure` cookie; Starlette `TrustedHostMiddleware`
+  so reads are not exposed to DNS rebinding; rate limiting on `/unlock`; and real user identity
+  (today the "actor" is a self-declared name, and the token proves access, not who you are). Sessions
+  are stateless, so a stolen cookie works until it expires or the token is rotated. Reads are open by
+  design in V1.
+- **Migrations (Alembic)** are not set up. The database is throwaway for now.
+- **Known small limit:** two simultaneous Analyze requests can both call the model.
+- **Not built:** push from n8n, a scheduler inside the app (the sync is run by hand or by Task
+  Scheduler), alerting, metrics, and published eval scores.
+- **LangGraph (V3)** is a possible learning extension (multi-step diagnosis with read-only tools),
+  not part of what this project delivers.
 
-## Project layout
+## Repository layout
 
 ```
 app/
-  main.py        FastAPI app, startup (token check, table creation)
-  config.py      settings from environment variables
-  database.py    engine, sessions, SQLite settings, UTC datetime type
-  models.py      Workflow, ExecutionEvent, ExecutionStatus
-  schemas.py     Pydantic input/output models
-  auth.py        ingest token check
-  logging_config.py  log format, level, request id on every record
-  middleware.py  request id, access log, catch-all error handler
-  sanitize.py    error text redaction
-  timeutil.py    UTC helpers, duration, date-bound parsing
-  n8n_client.py  read-only (GET-only) n8n API client
-  routers/       thin HTTP routes (API and HTML pages)
-  services/      all database logic; n8n_sync.py is the pull sync
-  templates/     Jinja2 templates
-scripts/         reset_db.py, seed.py, sync_n8n.py
-tests/           pytest suite (fresh database per test)
+  analysis/      prompt, output schema, server-side verification, OpenAI adapter
+  routers/       thin HTTP routes: workflows, events, incidents (JSON) and pages (HTML)
+  services/      all database logic, incident grouping, context, analysis, approval, n8n sync
+  templates/     Jinja2 pages (inline CSS, no JS)
+  signature.py   incident signature + message normalization (pure)
+  sanitize.py    secret redaction and PII scrubbing
+  ui_auth.py     unlock session, CSRF, Origin/Host check
+  n8n_client.py  read-only n8n API client
+scripts/         seed, sync_n8n, rebuild_incidents, eval_analysis, reset_db
+tests/           pytest suite, scrubbed n8n fixtures, a labelled incident corpus
 screenshots/     images used in this README
 ```
 
-`CLAUDE.md` records the project's conventions (timestamp handling, sync sessions, database
-portability) for the AI assistant used to build it.
+`CLAUDE.md` records the project's conventions for the AI assistant used to build it.
