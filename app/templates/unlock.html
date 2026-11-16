@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Unlock · FlowOps AI{% endblock %}
+{% block content %}
+<h1>Unlock</h1>
+<p class="muted">Reading is open. To analyze, acknowledge, resolve or confirm a cause, enter the FlowOps token
+  (<code>FLOWOPS_INGEST_TOKEN</code>) and your name once. The token is checked and discarded: this browser keeps
+  only a signed 12-hour session, and the name is recorded with what you do. Localhost only.</p>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<form method="post" action="/unlock" class="stack">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <label>Token <input type="password" name="token" autocomplete="off" required></label>
+  <label>Your name <input type="text" name="actor" maxlength="100" required></label>
+  <button type="submit">Unlock</button>
+</form>
+{% endblock %}

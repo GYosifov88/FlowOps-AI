@@ -240,12 +240,41 @@ Do NOT add React, Docker, Redis, Celery, vector DBs, LangChain or LangGraph.
 - Adding the tables AND widening the `incident_status` CHECK needs a DB reset (`create_all` never alters a table); then
   re-register the workflow, re-sync and re-analyze. No n8n writes: the client stays GET-only. Nothing auto-applies.
 
+## Incident UI (V2-M5)
+- Pages (`app/routers/pages.py`, hidden from OpenAPI, Jinja2, no JS, inline CSS): `GET /incidents` (`?view=active|all|<status>`,
+  default `active` = open + regressed; 25 per page), `GET /incidents/{id}` (404 renders an HTML page), the dashboard "Open
+  incidents" card + list (`dashboard.get_dashboard`), `GET/POST /unlock`, `POST /lock`. Data comes from
+  `app/services/incident_views.py` (builders shared with the JSON API: same dicts, pydantic views only, so `error_raw` cannot
+  be rendered). Rendering a page NEVER calls a model, writes, or changes a status.
+- Actions are POST -> do the work -> 303 back (`?notice=<key>` / `?error=<key>`): `/incidents/{id}/analyze` (`force=1` = run again),
+  `/transition` (`to`, `note`), `/confirm` (`analysis_id`, `hypothesis_index`, `note`). The key maps to a FIXED message in
+  `pages.NOTICES/ERRORS`; URL text is never echoed. They reuse `analysis_service`, `approval`: same rules as the API.
+- UI auth (`app/ui_auth.py`, stdlib only: no `python-multipart`, no `itsdangerous`): `POST /unlock` takes the ingest token + a
+  name (same rule as the API's `actor`), then sets cookie `flowops_ui` = signed `{actor, iat, nonce}` (HMAC-SHA256, key derived
+  from the token, so rotating the token logs everyone out), HttpOnly, SameSite=Strict, 12 h, NOT Secure (plain http on localhost:
+  must change before any deployment). The token is never stored in the cookie or any page. Every state-changing form POST goes
+  through the `ui_action` dependency, in this order: (1) Host must be localhost/127.0.0.1/[::1] and Origin must equal this site
+  (403; SameSite alone is not enough, browsers treat every localhost port as one site), (2) no cookie = 303 to
+  `/unlock?next=...`, a cookie that is present but tampered / expired / future / made under another token = 403 and the cookie is
+  cleared, (3) the per-session CSRF token in the hidden `csrf` field (403). The actor recorded is the SESSION's, never a form field.
+  `next` is accepted only as a site-relative path (`safe_next`). Forms are urlencoded only, <= 16 KB, <= 20 fields.
+- Limits (honest): sessions are stateless (a stolen cookie works until it expires or the token is rotated); reads stay open
+  (V1), including to a DNS-rebinding page (no app-wide TrustedHost); no rate limit on `/unlock`; two quick Analyze clicks can
+  make two model calls (the V2-M3 limit). Tests: `tests/test_ui_auth.py` (session security), `tests/test_incident_pages.py`.
+- How "verified" is shown: three different things with different badges. `Fact · checked` (the model's statement whose evidence
+  FlowOps matched), `AI hypothesis` + `confidence: low|medium|high` (+ `unsupported`), and `Confirmed cause` = a person's
+  confirmation, in `<section id="confirmed-cause">`. The word "verified" appears ONLY inside that box (an HTML test removes the box
+  and searches the rest of every page, case-insensitively: do not write it in templates, CSS or comments that render).
+  All model and user text is autoescaped; no `|safe`, no `Markup` anywhere (tests scan the source and a `<script>` payload).
+- `AnalysisRead.analysis` is the stored CHECKED analysis; the page shows the newest `ok` one and lists every attempt.
+- No schema change, no DB reset, no new dependency.
+
 ## Other conventions
 - Dependencies are pinned in `requirements.txt`. Pre-authorized: fastapi, uvicorn,
   pydantic, python-dotenv, pytest, httpx2, sqlalchemy, jinja2 (+ `openai`, approved for V2-M3). Ask before adding anything else.
 - Secrets live in `.env` (git-ignored); keep `.env.example` current. Never hardcode secrets
   or use real production data in tests.
 - Keep business logic out of route functions and templates.
-- V1 is localhost-only; the dashboard has no auth by design (revisit before any deployment).
+- V1 is localhost-only; the dashboard READS have no auth by design, and its actions need the unlock session (V2-M5). Revisit before any deployment.
 - If a milestone spec is wrong or inconsistent, say so and STOP — don't silently improve it.
 - Update this file whenever commands or conventions change.

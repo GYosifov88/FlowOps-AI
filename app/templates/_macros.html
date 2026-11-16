@@ -18,3 +18,35 @@
   </tbody>
 </table></div>
 {% endmacro %}
+
+{# Incident status. regressed = a resolved incident failed again (needs attention again). #}
+{% macro incident_badge(status) %}<span class="badge {{ status.value }}">{{ status.value }}</span>{% endmacro %}
+
+{# What the MODEL claimed. A category, not a measurement, and never a confirmation. #}
+{% macro confidence(level) %}<span class="badge conf-{{ level }}">confidence: {{ level }}</span>{% endmacro %}
+
+{# Model text is plain data: it is escaped on output and never marked as trusted HTML. #}
+{% macro evidence_list(items) %}
+{% if items %}<ul class="plain">
+  {% for e in items %}<li class="muted">evidence <code>{{ e.ref }}</code>: “{{ e.quote }}”</li>{% endfor %}
+</ul>{% endif %}
+{% endmacro %}
+
+{% macro incidents_table(items, names) %}
+<div class="wrap"><table>
+  <thead><tr><th>Status</th><th>Workflow</th><th>Node</th><th>Error</th><th>Occurrences</th><th>Last seen</th></tr></thead>
+  <tbody>
+  {% for i in items %}
+    <tr class="{{ 'row-regressed' if i.status.value == 'regressed' }}">
+      <td>{{ incident_badge(i.status) }}</td>
+      <td>{{ names.get(i.workflow_id, 'Workflow #' ~ i.workflow_id) }}</td>
+      <td>{{ i.node_name or '—' }}</td>
+      <td class="err"><a href="/incidents/{{ i.id }}">{{ i.error_name or 'error' }}</a>
+        <div class="muted">{{ i.normalized_message }}</div></td>
+      <td>{{ i.occurrence_count }}</td>
+      <td>{{ i.last_seen | localtime }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endmacro %}

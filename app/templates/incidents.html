@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_macros.html" import incidents_table %}
+{% block title %}Incidents · FlowOps AI{% endblock %}
+{% block content %}
+<h1>Incidents</h1>
+<form method="get" action="/incidents" class="filters">
+  <label>Show
+    <select name="view">
+      {% for v in views %}<option value="{{ v }}" {{ 'selected' if v == view }}>{{ 'active (open + regressed)' if v == 'active' else v }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  {% if view != 'active' %}<a href="/incidents">Back to active</a>{% endif %}
+</form>
+
+{% for e in errors %}<div class="error">{{ e }}</div>{% endfor %}
+
+{% if not errors %}
+  {% if items %}
+    <p class="muted">{{ first }}–{{ last }} of {{ total }}</p>
+    {{ incidents_table(items, workflow_names) }}
+    <div class="pager">
+      {% if prev_url %}<a href="{{ prev_url }}">← Newer</a>{% endif %}
+      {% if next_url %}<a href="{{ next_url }}">Older →</a>{% endif %}
+    </div>
+  {% elif view == 'active' %}
+    <div class="empty" id="no-active"><strong>No open incidents.</strong> Failed executions that share a cause are grouped here.
+      <a href="/incidents?view=all">Show all incidents</a></div>
+  {% else %}
+    <div class="empty">No incidents match this view.</div>
+  {% endif %}
+{% endif %}
+{% endblock %}

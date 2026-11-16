@@ -1,5 +1,3 @@
-import json
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
@@ -7,7 +5,7 @@ from app.analysis.analyzer import Analyzer, OpenAIAnalyzer
 from app.auth import require_ingest_token
 from app.config import Settings, get_settings
 from app.database import get_db
-from app.models import IncidentAnalysis, IncidentStatus
+from app.models import IncidentStatus
 from app.schemas import (
     AnalysisRead,
     AnalyzeResponse,
@@ -23,19 +21,16 @@ from app.schemas import (
 )
 from app.services import analysis as analysis_service
 from app.services import approval
-from app.services import incident_context
+from app.services import incident_context, incident_views
 from app.services import incidents as service
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
 
-def get_analyzer(settings: Settings = Depends(get_settings)) -> Analyzer:
-    """The analyzer for this request. Tests override this dependency with a fake."""
+def build_analyzer(settings: Settings) -> Analyzer | None:
+    """The configured analyzer, or None when there is no OPENAI_API_KEY."""
     if not settings.openai_api_key:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "OPENAI_API_KEY is not configured; incident analysis is unavailable",
-        )
+        return None
     return OpenAIAnalyzer(
         api_key=settings.openai_api_key,
         model=settings.openai_model,
@@ -45,60 +40,25 @@ def get_analyzer(settings: Settings = Depends(get_settings)) -> Analyzer:
     )
 
 
-def _analysis_read(row: IncidentAnalysis) -> dict:
-    return {
-        "id": row.id,
-        "incident_id": row.incident_id,
-        "context_hash": row.context_hash,
-        "context_version": row.context_version,
-        "prompt_version": row.prompt_version,
-        "provider": row.provider,
-        "model": row.model,
-        "status": row.status,
-        "analysis": json.loads(row.analysis_json) if row.analysis_json else None,
-        "validation_notes": json.loads(row.validation_notes_json) if row.validation_notes_json else [],
-        "refusal": row.refusal,
-        "error_type": row.error_type,
-        "input_tokens": row.input_tokens,
-        "output_tokens": row.output_tokens,
-        "reasoning_tokens": row.reasoning_tokens,
-        "forced": row.forced,
-        "created_at": row.created_at,
-    }
+def get_analyzer(settings: Settings = Depends(get_settings)) -> Analyzer:
+    """The analyzer for this request. Tests override this dependency with a fake."""
+    analyzer = build_analyzer(settings)
+    if analyzer is None:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "OPENAI_API_KEY is not configured; incident analysis is unavailable",
+        )
+    return analyzer
 
 
-def _confirmation_read(view: approval.ConfirmationView) -> dict:
-    row = view.row
-    return {
-        "id": row.id,
-        "incident_id": row.incident_id,
-        "analysis_id": row.analysis_id,
-        "hypothesis_index": row.hypothesis_index,
-        "cause": view.cause,
-        "confidence": view.confidence,
-        "supported": view.supported,
-        "verified_by": row.verified_by,
-        "note": row.note,
-        "created_at": row.created_at,
-    }
+def get_optional_analyzer(settings: Settings = Depends(get_settings)) -> Analyzer | None:
+    """Same, for the HTML pages: None (not a 503) when no key is configured."""
+    return build_analyzer(settings)
 
 
-def _read(summary: service.IncidentSummary) -> dict:
-    incident = summary.incident
-    return {
-        "id": incident.id,
-        "signature": incident.signature,
-        "signature_version": incident.signature_version,
-        "workflow_id": incident.workflow_id,
-        "node_name": incident.node_name,
-        "error_name": incident.error_name,
-        "normalized_message": incident.normalized_message,
-        "status": incident.status,
-        "occurrence_count": summary.occurrence_count,
-        "first_seen": summary.first_seen,
-        "last_seen": summary.last_seen,
-        "created_at": incident.created_at,
-    }
+_analysis_read = incident_views.analysis_read
+_confirmation_read = incident_views.confirmation_read
+_read = incident_views.incident_read
 
 
 @router.get("", response_model=IncidentPage)

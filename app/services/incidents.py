@@ -214,11 +214,31 @@ def _stats_subquery():
     )
 
 
+def incident_read(summary: IncidentSummary) -> dict:
+    """An IncidentSummary as the dict that `IncidentRead` validates (API and pages share it)."""
+    incident = summary.incident
+    return {
+        "id": incident.id,
+        "signature": incident.signature,
+        "signature_version": incident.signature_version,
+        "workflow_id": incident.workflow_id,
+        "node_name": incident.node_name,
+        "error_name": incident.error_name,
+        "normalized_message": incident.normalized_message,
+        "status": incident.status,
+        "occurrence_count": summary.occurrence_count,
+        "first_seen": summary.first_seen,
+        "last_seen": summary.last_seen,
+        "created_at": incident.created_at,
+    }
+
+
 def list_incidents(
     db: Session,
     *,
     workflow_id: int | None = None,
     status: IncidentStatus | None = None,
+    statuses: frozenset[IncidentStatus] | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[IncidentSummary], int]:
@@ -229,6 +249,8 @@ def list_incidents(
         conditions.append(Incident.workflow_id == workflow_id)
     if status is not None:
         conditions.append(Incident.status == status)
+    if statuses is not None:
+        conditions.append(Incident.status.in_(statuses))
 
     total = db.scalar(
         select(func.count())

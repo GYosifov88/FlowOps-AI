@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import events_table %}
+{% from "_macros.html" import events_table, incidents_table %}
 {% block title %}Dashboard · FlowOps AI{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
@@ -7,6 +7,9 @@
 <section id="summary" class="grid">
   <div class="card"><div class="n">{{ d.workflows_total }}</div><div class="l">registered workflows ({{ d.workflows_active }} active)</div></div>
   <div class="card"><div class="n">{{ d.events_total }}</div><div class="l">recorded executions</div></div>
+  <a class="card" id="open-incidents-card" href="/incidents" style="text-decoration:none;color:inherit">
+    <div class="n {{ 'failed' if d.incidents_active }}">{{ d.incidents_active }}</div>
+    <div class="l">open incidents ({{ d.incidents_regressed }} regressed)</div></a>
 </section>
 
 <h2>Executions by status</h2>
@@ -24,6 +27,13 @@
   To see sample data, run <code>python -m scripts.seed</code> while the app is running.
 </div>
 {% else %}
+<h2>Open incidents</h2>
+<section id="open-incidents">
+{% if d.recent_incidents %}{{ incidents_table(d.recent_incidents, d.workflow_names) }}
+<p><a href="/incidents">All open incidents →</a></p>
+{% else %}<div class="empty">No open incidents.</div>{% endif %}
+</section>
+
 <h2>Recent executions</h2>
 <section id="recent-events">
 {% if d.recent_events %}{{ events_table(d.recent_events, d.workflow_names, show_error=false) }}

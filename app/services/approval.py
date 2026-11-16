@@ -53,8 +53,12 @@ def _clean_note(note: str | None) -> str | None:
     return cleaned or None
 
 
-def _allowed(current: IncidentStatus) -> list[IncidentStatus]:
+def allowed_moves(current: IncidentStatus) -> list[IncidentStatus]:
+    """What a person may do from `current` (sorted by name)."""
     return sorted(HUMAN_TRANSITIONS[current], key=lambda s: s.value)
+
+
+_allowed = allowed_moves
 
 
 # ------------------------------------------------------------------ transitions

@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% from "_macros.html" import incident_badge, confidence, evidence_list, events_table %}
+{% set i = d.incident %}
+{% set unlock_url = '/unlock?next=/incidents/' ~ i.id %}
+{% block title %}Incident #{{ i.id }} · FlowOps AI{% endblock %}
+{% block content %}
+<p><a href="/incidents">← All incidents</a></p>
+<h1>Incident #{{ i.id }} {{ incident_badge(i.status) }}</h1>
+
+{% if notice %}<div class="notice" id="notice">{{ notice }}</div>{% endif %}
+{% if error %}<div class="error" id="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <div><strong>{{ d.workflow_name }}</strong> · node: {{ i.node_name or 'unattributed' }} · error: {{ i.error_name or 'unknown' }}</div>
+  <div class="muted err">{{ i.normalized_message }}</div>
+  <div class="muted">{{ i.occurrence_count }} occurrence(s) · first seen {{ i.first_seen | localtime }} · last seen {{ i.last_seen | localtime }}</div>
+</div>
+
+<div class="legend" id="legend">
+  <span><span class="badge kind-fact">Fact · checked</span> a statement whose evidence FlowOps found in the data</span>
+  <span><span class="badge kind-hyp">AI hypothesis</span> the model's guess; the model never confirms anything</span>
+  <span><span class="badge kind-confirmed">Confirmed cause</span> a person confirmed it, with a note</span>
+</div>
+
+{% if d.confirmed %}
+{% set c = d.confirmed %}
+<section id="confirmed-cause" class="box confirmed">
+  <span class="badge kind-confirmed">Confirmed cause</span>
+  <strong>Verified by {{ c.verified_by }}</strong> · {{ c.created_at | localtime }}
+  <p>{{ c.cause or '(the hypothesis text is unavailable)' }}</p>
+  <p class="muted">From analysis #{{ c.analysis_id }}, hypothesis {{ c.hypothesis_index + 1 }}.
+    The model's confidence was {{ c.confidence or 'unknown' }}{% if c.supported is false %}; FlowOps found no evidence for it in the data, so this rests on what the person checked{% endif %}.</p>
+  <p>Note: {{ c.note }}</p>
+  {% if d.confirmations | length > 1 %}
+  <details><summary>Earlier confirmations ({{ d.confirmations | length - 1 }})</summary>
+    <ul class="plain">
+    {% for old in d.confirmations[1:] %}
+      <li>{{ old.created_at | localtime }} · {{ old.verified_by }}: {{ old.cause or '(text unavailable)' }} — {{ old.note }}</li>
+    {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+
+<h2>Approval</h2>
+<section id="approval" class="box">
+  <p class="muted">Nothing is applied automatically, and FlowOps never writes to n8n. Acknowledging or resolving only records what a person did.</p>
+  {% if session %}
+    {% for to, label in d.allowed_moves %}
+    <form method="post" action="/incidents/{{ i.id }}/transition" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="to" value="{{ to }}">
+      <input type="text" name="note" maxlength="1000" placeholder="Note (optional)">
+      <button type="submit">{{ label }}</button>
+    </form>
+    {% else %}
+    <p>Resolved. If the workflow fails the same way again, this incident reopens as <em>regressed</em>.</p>
+    {% endfor %}
+  {% else %}
+    <p><a href="{{ unlock_url }}">Unlock</a> to acknowledge, resolve, analyze or confirm.</p>
+  {% endif %}
+  {% if d.transitions %}
+  <details><summary>Status history ({{ d.transitions | length }})</summary>
+    <ul class="plain">
+    {% for t in d.transitions %}
+      <li>{{ t.created_at | localtime }} · {{ t.from_status.value }} → {{ t.to_status.value }} · {{ t.actor }}{% if t.note %} — {{ t.note }}{% endif %}</li>
+    {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</section>
+
+<h2>Analysis</h2>
+<section id="analysis">
+  {% if session %}
+  <div class="box">
+    <form method="post" action="/incidents/{{ i.id }}/analyze" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit">Analyze</button>
+    </form>
+    <span class="muted">Sends the context shown below to the model; this costs money. An identical earlier result is reused for free.</span>
+    {% if d.analyses %}
+    <form method="post" action="/incidents/{{ i.id }}/analyze" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="force" value="1">
+      <button type="submit" class="danger">Run again (new model call, costs money)</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if not d.analyses %}
+    <div class="empty">No analysis yet. Analysis only runs when someone clicks Analyze.</div>
+  {% else %}
+    {% if d.analyses[0].status.value != 'ok' %}
+    <div class="banner" id="latest-attempt-failed">The newest attempt did not produce an analysis (status: {{ d.analyses[0].status.value }}{% if d.analyses[0].error_type %}, {{ d.analyses[0].error_type }}{% endif %}).</div>
+    {% endif %}
+
+    {% if d.analysis %}
+    {% set a = d.analysis.analysis %}
+    <div class="box">
+      <div class="muted">Analysis #{{ d.analysis.id }} · {{ d.analysis.model }} · {{ d.analysis.created_at | localtime }}</div>
+      <p><strong>{{ a.summary }}</strong></p>
+      <div>Category: <span class="badge kind-hyp">{{ a.category }}</span></div>
+    </div>
+    {% if a.insufficient_evidence %}
+    <div class="banner" id="insufficient-evidence">The model says the data is not enough to name a cause.</div>
+    {% endif %}
+
+    <h3>Facts</h3>
+    {% for f in a.facts %}
+    <div class="box fact"><span class="badge kind-fact">Fact · checked</span> {{ f.statement }}{{ evidence_list(f.evidence) }}</div>
+    {% else %}<div class="empty">No fact survived the evidence checks.</div>{% endfor %}
+
+    <h3>Hypotheses</h3>
+    {% for h in a.hypotheses %}
+    <div class="box hyp">
+      <span class="badge kind-hyp">AI hypothesis</span>
+      {{ confidence(h.confidence) }}
+      {% if not h.supported %}<span class="badge unsupported">unsupported: no evidence matched the data</span>{% endif %}
+      <p>{{ h.cause }}</p>
+      {{ evidence_list(h.supporting_evidence) }}
+      {% if h.would_confirm %}<div class="muted">To confirm it, check:</div>
+      <ul class="plain">{% for w in h.would_confirm %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+      {% if h.verification_steps %}<div class="muted">Steps:</div>
+      <ul class="plain">{% for s in h.verification_steps %}<li>{{ s }}</li>{% endfor %}</ul>{% endif %}
+      {% if d.confirmed and d.confirmed.analysis_id == d.analysis.id and d.confirmed.hypothesis_index == loop.index0 %}
+        <div class="muted">A person confirmed this one (see above).</div>
+      {% endif %}
+      {% if session %}
+      <form method="post" action="/incidents/{{ i.id }}/confirm" class="stack">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="analysis_id" value="{{ d.analysis.id }}">
+        <input type="hidden" name="hypothesis_index" value="{{ loop.index0 }}">
+        <label>What did you check? (required)<textarea name="note" rows="2" maxlength="1000" required></textarea></label>
+        <button type="submit">Confirm this cause</button>
+      </form>
+      {% endif %}
+    </div>
+    {% else %}<div class="empty">The model offered no hypothesis.</div>{% endfor %}
+
+    {% if a.recommended_actions %}
+    <h3>Suggestions for a person</h3>
+    <p class="muted">FlowOps runs nothing; these are only ideas.</p>
+    <ul class="plain">
+      {% for r in a.recommended_actions %}<li>{{ r.step }} <span class="muted">(risk: {{ r.risk }})</span></li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if d.analysis.validation_notes %}
+    <details><summary>What the server removed or lowered ({{ d.analysis.validation_notes | length }})</summary>
+      <ul class="plain">{% for n in d.analysis.validation_notes %}<li>{{ n }}</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+    {% endif %}
+
+    <h3>All attempts</h3>
+    <div class="wrap"><table id="attempts">
+      <thead><tr><th>#</th><th>When</th><th>Status</th><th>Model</th><th>Tokens (in / out / reasoning)</th><th></th></tr></thead>
+      <tbody>
+      {% for t in d.analyses %}
+        <tr>
+          <td>{{ t.id }}</td><td>{{ t.created_at | localtime }}</td>
+          <td><span class="badge {{ 'success' if t.status.value == 'ok' else 'failed' }}">{{ t.status.value }}</span>{% if t.error_type %} <span class="muted">{{ t.error_type }}</span>{% endif %}</td>
+          <td>{{ t.model }}</td>
+          <td>{{ t.input_tokens if t.input_tokens is not none else '—' }} / {{ t.output_tokens if t.output_tokens is not none else '—' }} / {{ t.reasoning_tokens if t.reasoning_tokens is not none else '—' }}</td>
+          <td>{{ 'forced' if t.forced }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% endif %}
+</section>
+
+<h2>Occurrences</h2>
+<section id="occurrences">
+  {{ events_table(d.events, {i.workflow_id: d.workflow_name}) }}
+  <p class="muted">The {{ d.events | length }} newest of {{ i.occurrence_count }}. Only the sanitized error summary is shown.</p>
+</section>
+
+<h2>Context</h2>
+<section id="context">
+  <details>
+    <summary>The exact data a model would be given (hash <code>{{ d.context_hash }}</code>)</summary>
+    <pre>{{ d.context_json }}</pre>
+  </details>
+</section>
+{% endblock %}
