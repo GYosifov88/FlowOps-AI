@@ -80,6 +80,24 @@ remote system). So the design makes certainty impossible to express rather than 
 What this does *not* do: the check proves a quote is really in the data, not that the model's
 conclusion is true. Hypotheses are guesses; that is why a person confirms them.
 
+#### Evaluation
+
+I ran `python -m scripts.eval_analysis --yes` once over the hand-labelled synthetic corpus (20
+incidents, one per group):
+
+| Measure | Result |
+|---|---|
+| Category accuracy | 100% |
+| Trap cases failed | 0 |
+| Facts removed by verification | 0% (every cited `{ref, quote}` resolved to real context) |
+| Total run cost | $0.0107 |
+
+How to read this: the corpus is **synthetic and written by me**, so it tests whether the guardrails
+hold on designed cases, including traps built to tempt an overconfident or fabricated cause (a trap
+passes only if the model reports insufficient evidence and claims no `high`-confidence hypothesis).
+It is **not** a measure of accuracy on real failures. A perfect score on 20 designed cases is a
+sanity check that the construction works, not a claim that the model is always right.
+
 ### 2. Prompt-injection defence
 
 Error messages are third-party text and can say "ignore previous instructions". The context is
@@ -257,7 +275,7 @@ This is a finished V1 + V2, not a production service.
 - **Migrations (Alembic)** are not set up. The database is throwaway for now.
 - **Known small limit:** two simultaneous Analyze requests can both call the model.
 - **Not built:** push from n8n, a scheduler inside the app (the sync is run by hand or by Task
-  Scheduler), alerting, metrics, and published eval scores.
+  Scheduler), alerting, and metrics. The eval above is one run on a synthetic corpus, not a benchmark.
 - **LangGraph (V3)** is a possible learning extension (multi-step diagnosis with read-only tools),
   not part of what this project delivers.
 
