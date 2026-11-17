@@ -297,3 +297,8 @@ screenshots/     images used in this README
 ```
 
 `CLAUDE.md` records the project's conventions for the AI assistant used to build it.
+
+
+## License
+
+MIT — see [LICENSE](LICENSE).
